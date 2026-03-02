@@ -1,265 +1,103 @@
 """
-utils.py — Shared utilities for the Student Engagement Monitoring System.
+utils.py — Premium Shared utilities for the Focus Flow System.
+Includes visual design system, multi-language support, and OBS overlay helpers.
 """
 import streamlit as st
 import numpy as np
 import random
+import time
 from datetime import datetime, timedelta
 
+def get_custom_css():
+    settings = st.session_state.get('settings_config', {})
+    accent = settings.get('accent_color', '#6C63FF')
+    
+    css = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono&display=swap');
+    :root {{
+        --bg-color: #0F1117;
+        --surface-color: #1A1D27;
+        --accent-primary: {accent};
+        --accent-secondary: #00D2FF;
+        --success: #00E676;
+        --warning: #FFD600;
+        --error: #FF5252;
+        --text-primary: #FFFFFF;
+        --text-secondary: #9E9E9E;
+        --glass-bg: rgba(255, 255, 255, 0.05);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --radius: 12px;
+    }}
+    .stApp {{ animation: fadeIn 0.6s ease-in-out; background-color: var(--bg-color); }}
+    @keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+    
+    .glass-panel {{
+        background: var(--glass-bg); backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border); border-radius: var(--radius);
+        padding: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }}
+    
+    .metric-card {{
+        background: var(--surface-color); border-radius: var(--radius);
+        padding: 1.5rem; border: 1px solid var(--glass-border);
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        text-align: center; position: relative;
+    }}
+    .metric-card:hover {{ transform: translateY(-8px); border-color: var(--accent-primary); }}
+    .metric-value {{ font-size: 2.2rem; font-weight: 800; font-family: 'JetBrains Mono'; }}
+    .metric-label {{ color: var(--text-secondary); font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; }}
 
-# ─── Theme CSS ────────────────────────────────────────────────────────────────
+    .stButton > button {{
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)) !important;
+        border-radius: 50px !important; color: white !important; font-weight: 700 !important;
+        box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3) !important;
+    }}
+    
+    .status-dot {{ height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }}
+    .status-live {{ background-color: var(--success); box-shadow: 0 0 12px var(--success); animation: pulseStatus 2s infinite; }}
+    .status-idle {{ background-color: var(--text-secondary); }}
+    @keyframes pulseStatus {{ 0% {{ transform: scale(0.95); opacity: 0.7; }} 70% {{ transform: scale(1.1); opacity: 1; }} 100% {{ transform: scale(0.95); opacity: 0.7; }} }}
 
-THEMES = {
-    "Dark": """
-    <style>
-        :root {
-            --bg-primary: #0E1117;
-            --bg-secondary: #1a1d26;
-            --bg-card: #1e2130;
-            --text-primary: #FAFAFA;
-            --text-secondary: #B0B8C8;
-            --accent: #FF4B4B;
-            --accent-gradient: linear-gradient(135deg, #FF4B4B, #FF6B6B);
-            --success: #00D26A;
-            --warning: #FFB020;
-            --border: #2D3348;
-            --glass: rgba(30, 33, 48, 0.8);
-        }
-        .stApp { background-color: var(--bg-primary); }
-        .metric-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            text-align: center;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .metric-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 32px rgba(255,75,75,0.15);
-        }
-        .metric-card .metric-value {
-            font-size: 2.2rem;
-            font-weight: 800;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .metric-card .metric-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.3rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .status-active {
-            background: rgba(0,210,106,0.15);
-            color: #00D26A;
-            border: 1px solid rgba(0,210,106,0.3);
-        }
-        .status-completed {
-            background: rgba(255,75,75,0.15);
-            color: #FF4B4B;
-            border: 1px solid rgba(255,75,75,0.3);
-        }
-        .page-header {
-            background: linear-gradient(135deg, #1a1d26, #252838);
-            border-radius: 20px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border: 1px solid var(--border);
-        }
-        .page-header h1 {
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5rem;
-        }
-        /* Sidebar styling */
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #1a1d26, #0E1117);
-            border-right: 1px solid var(--border);
-        }
-        /* Input styling */
-        .stTextInput > div > div > input,
-        .stSelectbox > div > div {
-            border-radius: 10px !important;
-            border: 1px solid var(--border) !important;
-        }
-        /* Button styling */
-        .stButton > button {
-            border-radius: 10px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(255,75,75,0.3);
-        }
+    /* Overlay Mode Styles */
+    .overlay-hud {{ position: fixed; top: 20px; right: 20px; z-index: 9999; pointer-events: none; }}
+    .hud-card {{ background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 12px; border: 1px solid var(--accent-primary); }}
     </style>
-    """,
-    "Light": """
-    <style>
-        :root {
-            --bg-primary: #FFFFFF;
-            --bg-secondary: #F8F9FA;
-            --bg-card: #FFFFFF;
-            --text-primary: #1A1A2E;
-            --text-secondary: #6C757D;
-            --accent: #FF4B4B;
-            --accent-gradient: linear-gradient(135deg, #FF4B4B, #FF6B6B);
-            --success: #00C853;
-            --warning: #FF9800;
-            --border: #E0E0E0;
-            --glass: rgba(255,255,255,0.9);
-        }
-        .stApp { background-color: var(--bg-primary); }
-        .metric-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            text-align: center;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .metric-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.12);
-        }
-        .metric-card .metric-value {
-            font-size: 2.2rem;
-            font-weight: 800;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .metric-card .metric-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.3rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-        .status-active { background: rgba(0,200,83,0.12); color: #00C853; border: 1px solid rgba(0,200,83,0.3); }
-        .status-completed { background: rgba(255,75,75,0.12); color: #FF4B4B; border: 1px solid rgba(255,75,75,0.3); }
-        .page-header {
-            background: linear-gradient(135deg, #F8F9FA, #E8EAF0);
-            border-radius: 20px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border: 1px solid var(--border);
-        }
-        .page-header h1 {
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5rem;
-        }
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #F8F9FA, #FFFFFF);
-            border-right: 1px solid var(--border);
-        }
-        .stButton > button { border-radius: 10px; font-weight: 600; }
-    </style>
-    """,
-    "Solarized": """
-    <style>
-        :root {
-            --bg-primary: #002B36;
-            --bg-secondary: #073642;
-            --bg-card: #073642;
-            --text-primary: #FDF6E3;
-            --text-secondary: #93A1A1;
-            --accent: #B58900;
-            --accent-gradient: linear-gradient(135deg, #B58900, #CB4B16);
-            --success: #859900;
-            --warning: #CB4B16;
-            --border: #586E75;
-            --glass: rgba(7,54,66,0.85);
-        }
-        .stApp { background-color: var(--bg-primary); }
-        .metric-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            text-align: center;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-            transition: transform 0.2s;
-        }
-        .metric-card:hover { transform: translateY(-4px); }
-        .metric-card .metric-value {
-            font-size: 2.2rem;
-            font-weight: 800;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .metric-card .metric-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.3rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-        .status-active { background: rgba(133,153,0,0.15); color: #859900; border: 1px solid rgba(133,153,0,0.3); }
-        .status-completed { background: rgba(203,75,22,0.15); color: #CB4B16; border: 1px solid rgba(203,75,22,0.3); }
-        .page-header {
-            background: linear-gradient(135deg, #073642, #002B36);
-            border-radius: 20px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border: 1px solid var(--border);
-        }
-        .page-header h1 {
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5rem;
-        }
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #073642, #002B36);
-            border-right: 1px solid var(--border);
-        }
-        .stButton > button { border-radius: 10px; font-weight: 600; }
-    </style>
-    """,
+    """
+    return css
+
+LANGUAGES = {
+    'English': {
+        'welcome': 'Welcome', 'dashboard': 'Dashboard', 'sessions': 'Sessions', 'analytics': 'Analytics',
+        'settings': 'Settings', 'about': 'About', 'integrations': 'Integrations', 'start_session': 'Start Session',
+        'end_session': 'End Session', 'live_metric': 'Engagement', 'ear': 'Alertness', 'spoof_warn': '🚨 Activity detected!',
+        'coach': 'AI Coach', 'streak': 'Streak'
+    },
+    'Spanish': {
+        'welcome': 'Bienvenido', 'dashboard': 'Panel', 'sessions': 'Sesiones', 'analytics': 'Analítica',
+        'settings': 'Ajustes', 'about': 'Acerca de', 'integrations': 'Integraciones', 'start_session': 'Comenzar',
+        'end_session': 'Terminar', 'live_metric': 'Compromiso', 'ear': 'Alerta', 'spoof_warn': '🚨 Actividad detectada!',
+        'coach': 'Coach AI', 'streak': 'Racha'
+    }
 }
 
+def t(key):
+    lang = st.session_state.settings_config.get('language', 'English')
+    return LANGUAGES.get(lang, LANGUAGES['English']).get(key, key)
 
-def apply_theme(theme_name: str = "Dark"):
-    """Inject CSS theme into the current Streamlit page."""
-    css = THEMES.get(theme_name, THEMES["Dark"])
-    st.markdown(css, unsafe_allow_html=True)
-
-
-def get_theme():
-    """Get current theme from session state."""
-    return st.session_state.get("theme", "Dark")
-
+def apply_theme():
+    st.markdown(get_custom_css(), unsafe_allow_html=True)
+    if st.query_params.get("overlay") == "true":
+        st.markdown("<style>#MainMenu, footer, header, [data-testid='stSidebar'] {display: none !important;}</style>", unsafe_allow_html=True)
 
 def require_auth():
-    """Check authentication and stop page if not authenticated."""
     if not st.session_state.get("authentication_status"):
-        st.warning("🔒 Please login from the main page to access this feature.")
+        st.warning("🔒 Please login from the main page.")
         st.stop()
 
-
 def get_current_user_id(db):
-    """Get or create User record from the auth username in session state."""
     from database import User
-    username = st.session_state.get("username", "anonymous")
+    username = st.session_state.get("username", "student")
     user = db.query(User).filter(User.username == username).first()
     if not user:
         user = User(username=username, email=f"{username}@focusflow.app")
@@ -268,138 +106,46 @@ def get_current_user_id(db):
         db.refresh(user)
     return user.id
 
+def format_duration(s):
+    if not s: return "0s"
+    m, s = divmod(int(s), 60)
+    h, m = divmod(m, 60)
+    return f"{h}h {m}m {s}s" if h else f"{m}m {s}s" if m else f"{s}s"
 
-def format_duration(seconds):
-    """Convert seconds to a human-readable duration string."""
-    if seconds is None or seconds < 0:
-        return "0s"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    if hours > 0:
-        return f"{hours}h {minutes}m {secs}s"
-    elif minutes > 0:
-        return f"{minutes}m {secs}s"
-    return f"{secs}s"
+def render_metric_card(label, value, icon="📊", tooltip=""):
+    st.markdown(f'<div class="metric-card" title="{tooltip}"><div style="font-size: 1.5rem;">{icon}</div><div class="metric-value">{value}</div><div class="metric-label">{label}</div></div>', unsafe_allow_html=True)
 
-
-def render_metric_card(label: str, value: str, icon: str = "📊"):
-    """Render a styled metric card using custom HTML."""
+def render_page_header(title, subtitle="", status="idle"):
+    dot = "status-live" if status == "live" else "status-idle"
     st.markdown(f"""
-    <div class="metric-card">
-        <div style="font-size: 1.5rem; margin-bottom: 0.3rem;">{icon}</div>
-        <div class="metric-value">{value}</div>
-        <div class="metric-label">{label}</div>
+    <div class="glass-panel" id="header-container">
+        <h1 style="margin:0; cursor:pointer;" onclick="triggerConfetti()"><span class="status-dot {dot}"></span>{title}</h1>
+        <p style="opacity:0.8; margin-top:5px;">{subtitle}</p>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script>
+        let logoClicks = 0, lastLogoClick = 0;
+        function triggerConfetti() {{
+            const now = Date.now();
+            if (now - lastLogoClick < 600) logoClicks++; else logoClicks = 1;
+            lastLogoClick = now;
+            if (logoClicks >= 5) {{
+                confetti({{ particleCount: 150, spread: 70, origin: {{ y: 0.6 }} }});
+                logoClicks = 0;
+            }}
+        }}
+    </script>
     """, unsafe_allow_html=True)
-
-
-def render_page_header(title: str, subtitle: str = ""):
-    """Render a styled page header."""
-    sub_html = f'<p style="color: var(--text-secondary, #B0B8C8); margin-top: 0.5rem; font-size: 1rem;">{subtitle}</p>' if subtitle else ""
-    st.markdown(f"""
-    <div class="page-header">
-        <h1>{title}</h1>
-        {sub_html}
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def generate_fake_session_data(duration_minutes: int = 30):
-    """Generate realistic fake engagement data for the Demo page."""
-    data_points = duration_minutes * 30  # ~30 fps equivalent, but we sample every 2s
-    sample_count = duration_minutes * 30  # 30 samples per minute (every 2 seconds)
-
-    timestamps = []
-    engagement_scores = []
-    ear_values = []
-    gaze_scores = []
-    head_yaw = []
-    head_pitch = []
-    is_distracted = []
-    is_spoof = []
-
-    base_time = datetime.now() - timedelta(minutes=duration_minutes)
-    base_engagement = 75.0
-    trend = 0.0
-
-    for i in range(sample_count):
-        t = base_time + timedelta(seconds=i * 2)
-        timestamps.append(t)
-
-        # Create realistic engagement patterns
-        # Periodic dips (distraction events)
-        dip = 0
-        if random.random() < 0.08:  # 8% chance of distraction
-            dip = random.uniform(20, 45)
-            trend = -2.0
-        elif random.random() < 0.03:  # 3% chance of major distraction
-            dip = random.uniform(50, 70)
-            trend = -5.0
-        else:
-            score = max(0.0, min(100.0, float(base_engagement + trend + random.uniform(-5, 5) - dip)))
-        engagement_scores.append(round(score, 1))
-
-        ear = round(float(random.uniform(0.22, 0.38) if score > 40 else random.uniform(0.15, 0.25)), 3)
-        ear_values.append(ear)
-
-        gaze = round(float(max(0.0, min(1.0, score / 100.0 + random.uniform(-0.1, 0.1)))), 2)
-        gaze_scores.append(gaze)
-
-        yaw = round(float(random.uniform(-10, 10) if score > 50 else random.uniform(-40, 40)), 1)
-        head_yaw.append(yaw)
-        pitch = round(float(random.uniform(-8, 8) if score > 50 else random.uniform(-25, 25)), 1)
-        head_pitch.append(pitch)
-
-        is_distracted.append(score < 45)
-        is_spoof.append(False)
-
-        base_engagement = score  # carry forward
-
-    return {
-        "timestamps": timestamps,
-        "engagement_scores": engagement_scores,
-        "ear_values": ear_values,
-        "gaze_scores": gaze_scores,
-        "head_yaw": head_yaw,
-        "head_pitch": head_pitch,
-        "is_distracted": is_distracted,
-        "is_spoof": is_spoof,
-        "duration_minutes": duration_minutes,
-        "avg_engagement": round(float(np.mean(engagement_scores)), 1),
-        "peak_engagement": round(float(max(engagement_scores)), 1),
-        "total_distractions": sum(is_distracted),
-    }
-
 
 def init_session_defaults():
-    """Initialize all session state defaults if not already set."""
+    if "settings_config" not in st.session_state:
+        st.session_state.settings_config = {
+            "app_name": "Focus Flow", "accent_color": "#6C63FF", "language": "English", "focused_threshold": 70, 
+            "distracted_threshold": 40, "ambient_sound": "None", "ambient_volume": 50, "widgets": {"engagement": True, "ear": True, "posture": True, "timeline": True}
+        }
     defaults = {
-        "authentication_status": None,
-        "name": None,
-        "username": None,
-        "troll_caught": False,
-        "troll_mode": True,
-        "nudge_only": False,
-        "theme": "Dark",
-        "nudge_sensitivity": "Medium",
-        "notification_sound": True,
-        "webcam_source": 0,
-        "gemini_api_key": "",
-        "bot_training_enabled": False,
-        "export_preference": "Both",
-        "current_session_id": None,
-        "live_stats": {
-            "scores": [],
-            "timestamps": [],
-            "distractions": 0,
-            "gaze_scores": [],
-            "ear_values": [],
-        },
-        "last_troll_time": 0,
-        "distraction_start_time": None,
-        "db_url": None,
+        "authentication_status": None, "username": None, "troll_mode": True, "nudge_only": False, "streak_count": 0, "chat_history": [],
+        "current_session_id": None, "live_stats": {"scores": [], "timestamps": [], "distractions": 0, "gaze_scores": [], "ear_values": []}
     }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+    for k, v in defaults.items():
+        if k not in st.session_state: st.session_state[k] = v

@@ -1,216 +1,183 @@
-"""
-5_Settings.py — User settings: troll mode, theme, nudges, API keys, DB config, model training.
-"""
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import json
-from datetime import datetime
+import time
+import os
+import base64
+from database import get_engine, SessionLocal, User, UserSetting, migrate_db
+from utils import apply_theme, require_auth, render_page_header, t
+import yaml
 
-from utils import apply_theme, require_auth, render_page_header
-from database import get_db, get_engine, migrate_db, init_db, TrainingData, UserSetting
-from ml_model import EngagementModel
-
-st.set_page_config(page_title="Settings — Focus Flow", page_icon="🧠", layout="wide")
-apply_theme(st.session_state.get("theme", "Dark"))
+# ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
 
-render_page_header("⚙️ Settings", "Customize your Focus Flow experience")
+# ─── Page Setup ─────────────────────────────────────────────────────────────
+app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+st.set_page_config(page_title=f"{app_name} - Settings", page_icon="⚙️", layout="wide")
+apply_theme()
 
-# ─── Troll & Nudge Settings ──────────────────────────────────────────────────
-st.subheader("🤡 Troll & Nudge Mode")
+render_page_header(f"⚙️ {t('settings')}", "Personalize your focus environment.")
 
-col_t1, col_t2 = st.columns(2)
-with col_t1:
-    troll_mode = st.toggle("Enable Troll / Nudge Mode",
-                            value=st.session_state.get('troll_mode', True),
-                            help="When enabled, fun animations appear when you're distracted")
-    st.session_state['troll_mode'] = troll_mode
+# ─── Load Settings from DB ──────────────────────────────────────────────────
+db = SessionLocal()
+username = st.session_state.username
+user = db.query(User).filter(User.username == username).first()
+if user and not user.settings:
+    user.settings = UserSetting(user_id=user.id)
+    db.commit()
+settings_obj = user.settings
 
-with col_t2:
-    if troll_mode:
-        nudge_only = st.toggle("Nudge-Only Mode (no visual effects)",
-                                value=st.session_state.get('nudge_only', False),
-                                help="Show only toast notifications, no emoji storms or popups")
-        st.session_state['nudge_only'] = nudge_only
+# Sync session state with DB if needed
+if "settings_config" not in st.session_state:
+    st.session_state.settings_config = settings_obj.premium_config or {}
 
-if troll_mode:
-    sensitivity = st.select_slider(
-        "📢 Nudge Sensitivity",
-        options=["Low", "Medium", "High"],
-        value=st.session_state.get('nudge_sensitivity', 'Medium'),
-        help="Low = trigger after 3min, Medium = 2min, High = 1min of distraction",
-    )
-    st.session_state['nudge_sensitivity'] = sensitivity
+# ─── Layout Tabs ────────────────────────────────────────────────────────────
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🎨 Identity & Layout", 
+    "🕒 Session & Behavior", 
+    "🔔 Alerts & Language",
+    "🎧 Ambient",
+    "🚀 Deployment & DB"
+])
 
-    notification_sound = st.toggle("🔊 Notification Sound",
-                                    value=st.session_state.get('notification_sound', True))
-    st.session_state['notification_sound'] = notification_sound
+# ─── Tab 1: Identity & Layout ───────────────────────────────────────────────
+with tab1:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🖼️ App Identity")
+        new_app_name = st.text_input("Custom App Name", value=st.session_state.settings_config.get("app_name", "Focus Flow"))
+        accent_color = st.color_picker("Global Accent Color", value=st.session_state.settings_config.get("accent_color", "#6C63FF"))
+        
+        avatar_file = st.file_uploader("Profile Avatar", type=['png', 'jpg', 'jpeg'])
+        if avatar_file:
+            bytes_data = avatar_file.getvalue()
+            base64_avatar = base64.b64encode(bytes_data).decode()
+            st.session_state.settings_config["avatar"] = f"data:image/png;base64,{base64_avatar}"
+            st.success("Avatar uploaded!")
 
+    with col2:
+        st.subheader("📐 Dashboard Layout")
+        st.write("Toggle widget visibility:")
+        w_eng = st.toggle("Engagement Score Badge", value=st.session_state.settings_config.get("widgets", {}).get("engagement", True))
+        w_ear = st.toggle("Eye Alertness Gauge", value=st.session_state.settings_config.get("widgets", {}).get("ear", True))
+        w_pos = st.toggle("Posture/Yaw Score", value=st.session_state.settings_config.get("widgets", {}).get("posture", True))
+        w_tim = st.toggle("Engagement Timeline", value=st.session_state.settings_config.get("widgets", {}).get("timeline", True))
+        
+        layout_mode = st.radio("Layout Density", ["Spacious", "Compact"], index=0 if st.session_state.settings_config.get("layout") == "Spacious" else 1)
+
+# ─── Tab 2: Session & Behavior ──────────────────────────────────────────────
+with tab2:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("🎯 Engagement Thresholds")
+        f_thresh = st.slider("Focused Threshold (%)", 50, 95, value=st.session_state.settings_config.get("focused_threshold", 70))
+        d_thresh = st.slider("Distracted Threshold (%)", 10, 50, value=st.session_state.settings_config.get("distracted_threshold", 40))
+        
+        st.divider()
+        st.subheader("⏳ Session Rules")
+        auto_end = st.number_input("Auto-end session after N minutes of inactivity", 1, 60, value=st.session_state.settings_config.get("auto_end_minutes", 10))
+        
+    with col_b:
+        st.subheader("🍅 Pomodoro Mode")
+        pomo_on = st.toggle("Enable Pomodoro Intervals", value=st.session_state.settings_config.get("pomodoro_mode", False))
+        if pomo_on:
+            st.info("Sessions will auto-split into 25-min work / 5-min break blocks.")
+        
+        st.divider()
+        st.subheader("🏷️ Custom Tags")
+        st.write("Tag your sessions for better analytics (Coming soon)")
+
+# ─── Tab 3: Alerts & Language ───────────────────────────────────────────────
+with tab3:
+    col_x, col_y = st.columns(2)
+    with col_x:
+        st.subheader("📢 Smart Nudges")
+        st.session_state.troll_mode = st.toggle("Enable Troll/Nudge System", value=st.session_state.troll_mode)
+        st.session_state.nudge_only = st.toggle("Nudge Only (Subtle toasts only)", value=st.session_state.nudge_only)
+        
+        n_delay = st.selectbox("Trigger delay (consecutive distraction)", [1, 2, 5], index=1)
+        st.session_state.settings_config["n_delay"] = n_delay
+        
+        custom_msg = st.text_area("Custom Nudge Message", value=st.session_state.settings_config.get("custom_nudge_msg", "Stay focused! You got this."))
+
+    with col_y:
+        st.subheader("🌍 Localization")
+        lang = st.selectbox("Preferred Language", ["English", "Spanish", "French", "Hindi"], index=["English", "Spanish", "French", "Hindi"].index(st.session_state.settings_config.get("language", "English")))
+
+# ─── Tab 4: Ambient ────────────────────────────────────────────────────────
+with tab4:
+    st.subheader("🎶 Ambient Audio")
+    st.write("Choose a background sound for your sessions.")
+    ambient_opt = st.selectbox("Sound Type", ["None", "Lo-fi", "Rain", "White Noise", "Forest"], index=["None", "Lo-fi", "Rain", "White Noise", "Forest"].index(st.session_state.settings_config.get("ambient_sound", "None")))
+    ambient_vol = st.slider("Volume", 0, 100, value=st.session_state.settings_config.get("ambient_volume", 50))
+    
+    st.info("Note: Ambient audio plays automatically during active sessions.")
+
+# ─── Tab 5: Deployment & DB ───────────────────────────────────────────────
+with tab5:
+    st.subheader("🚀 Deployment Wizard")
+    d_tab1, d_tab2, d_tab3 = st.tabs(["Streamlit Cloud", "Docker", "Database Migration"])
+    
+    with d_tab1:
+        st.markdown("""
+        ### Deploy to Streamlit Community Cloud (Free)
+        1. Push this folder to a GitHub repository.
+        2. Go to [share.streamlit.io](https://share.streamlit.io).
+        3. Connect your repo and branch.
+        4. Add your **Secrets** (Gemini API Key, etc.) in the Cloud dashboard.
+        """)
+        st.button("Open Streamlit Cloud")
+
+    with d_tab2:
+        st.markdown("### Self-host with Docker")
+        st.code("""
+docker-compose build
+docker-compose up -d
+        """, language="bash")
+        st.write("Files generated: `Dockerfile`, `docker-compose.yml` are in your root folder.")
+
+    with d_tab3:
+        st.markdown("### Database Migration")
+        new_db_url = st.text_input("New Database URL (PostgreSQL/Supabase/SQLite)", value="sqlite:///focus_flow.db")
+        if st.button("Migrate & Connect"):
+            with st.spinner("Testing connection..."):
+                success, msg = migrate_db(new_db_url)
+                if success:
+                    st.success(msg)
+                    st.session_state.db_url = new_db_url
+                else:
+                    st.error(msg)
+
+# ─── Save All Actions ───────────────────────────────────────────────────────
 st.divider()
-
-# ─── Appearance ──────────────────────────────────────────────────────────────
-st.subheader("🎨 Appearance")
-
-theme = st.selectbox(
-    "Theme",
-    ["Dark", "Light", "Solarized"],
-    index=["Dark", "Light", "Solarized"].index(st.session_state.get('theme', 'Dark')),
-)
-if theme != st.session_state.get('theme'):
-    st.session_state['theme'] = theme
+if st.button("💾 Save All Personalized Settings", use_container_width=True):
+    # Update session state config
+    st.session_state.settings_config.update({
+        "app_name": new_app_name,
+        "accent_color": accent_color,
+        "layout": layout_mode,
+        "language": lang,
+        "focused_threshold": f_thresh,
+        "distracted_threshold": d_thresh,
+        "auto_end_minutes": auto_end,
+        "pomodoro_mode": pomo_on,
+        "custom_nudge_msg": custom_msg,
+        "ambient_sound": ambient_opt,
+        "ambient_volume": ambient_vol,
+        "widgets": {
+            "engagement": w_eng,
+            "ear": w_ear,
+            "posture": w_pos,
+            "timeline": w_tim
+        }
+    })
+    
+    # Save to DB
+    settings_obj.premium_config = st.session_state.settings_config
+    settings_obj.troll_mode = st.session_state.troll_mode
+    settings_obj.nudge_only = st.session_state.nudge_only
+    db.commit()
+    
+    st.success("✅ Settings saved successfully! Rerunning app...")
+    time.sleep(1)
     st.rerun()
 
-st.divider()
-
-# ─── Webcam ──────────────────────────────────────────────────────────────────
-st.subheader("📹 Webcam")
-webcam = st.number_input("Webcam Source Index", min_value=0, max_value=10,
-                          value=st.session_state.get('webcam_source', 0),
-                          help="0 = default camera, 1 = secondary camera, etc.")
-st.session_state['webcam_source'] = webcam
-
-st.divider()
-
-# ─── Gemini API ──────────────────────────────────────────────────────────────
-st.subheader("🤖 Gemini AI Integration")
-st.caption("Your API key is stored in session only — never saved to the database.")
-
-api_key = st.text_input(
-    "Gemini API Key",
-    value=st.session_state.get('gemini_api_key', ''),
-    type="password",
-    placeholder="Enter your Google Gemini API key...",
-)
-if st.button("💾 Save API Key"):
-    st.session_state['gemini_api_key'] = api_key
-    if api_key:
-        st.success("✅ API key saved to session!")
-    else:
-        st.info("API key cleared. Template-based reports will be used.")
-
-st.markdown("""
-<details>
-<summary>How to get a Gemini API key</summary>
-<ol>
-<li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
-<li>Click "Create API Key"</li>
-<li>Copy the key and paste it above</li>
-</ol>
-</details>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-# ─── Bot Training ────────────────────────────────────────────────────────────
-st.subheader("🧠 Real-Time Bot Training")
-
-bot_training = st.toggle(
-    "Enable Model Training",
-    value=st.session_state.get('bot_training_enabled', False),
-    help="Collect engagement data during sessions to train a personalized ML model",
-)
-st.session_state['bot_training_enabled'] = bot_training
-
-if bot_training:
-    st.info("📊 Training data will be collected during your sessions (with your consent).")
-
-# Model status
-try:
-    model = EngagementModel()
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric("Model Status", "Trained ✅" if model.is_trained else "Not Trained ❌")
-    with col_m2:
-        st.metric("Last Trained", model.get_last_trained())
-    with col_m3:
-        st.metric("Last Accuracy", f"{model.get_accuracy() * 100:.1f}%" if model.is_trained else "N/A")
-
-    # Training history chart
-    history = model.get_training_history()
-    if history:
-        hist_df = pd.DataFrame(history)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=list(range(len(hist_df))), y=hist_df['accuracy'] * 100,
-            mode='lines+markers', name='Accuracy',
-            line=dict(color='#00D26A', width=2),
-        ))
-        fig.update_layout(
-            title="Training Accuracy Over Time",
-            yaxis=dict(title="Accuracy %", range=[0, 105]),
-            xaxis=dict(title="Training Iteration"),
-            template="plotly_dark", height=250,
-        )
-        st.plotly_chart(fig, use_container_width=True)
-except Exception as e:
-    st.warning(f"Could not load model info: {e}")
-
-st.divider()
-
-# ─── Export Preferences ──────────────────────────────────────────────────────
-st.subheader("📄 Export Preferences")
-export_pref = st.radio(
-    "Default export format:",
-    ["PDF", "CSV", "Both"],
-    index=["PDF", "CSV", "Both"].index(st.session_state.get('export_preference', 'Both')),
-    horizontal=True,
-)
-st.session_state['export_preference'] = export_pref
-
-st.divider()
-
-# ─── Database Configuration ──────────────────────────────────────────────────
-st.subheader("🗄️ Database Configuration")
-
-current_db = st.session_state.get('db_url', 'SQLite (Local)')
-st.caption(f"Current: **{current_db if current_db else 'SQLite (Local, default)'}**")
-
-with st.expander("🔗 Connect External Database (PostgreSQL / Supabase)"):
-    db_url = st.text_input(
-        "Connection String",
-        placeholder="postgresql://user:password@host:5432/dbname",
-        type="password",
-    )
-    if st.button("🔌 Connect & Migrate"):
-        if db_url:
-            with st.spinner("Connecting..."):
-                success, msg = migrate_db(db_url)
-                if success:
-                    st.session_state['db_url'] = db_url
-                    st.success(f"✅ {msg}")
-                else:
-                    st.error(f"❌ {msg}")
-        else:
-            st.warning("Please enter a connection string.")
-
-    if st.button("🔄 Reset to Local SQLite"):
-        st.session_state['db_url'] = None
-        st.success("Reset to local SQLite database.")
-
-# Mini table viewer
-with st.expander("📊 Database Table Viewer"):
-    table_name = st.selectbox("Select Table",
-                               ["users", "sessions", "engagement_logs", "settings", "training_data"])
-    try:
-        from sqlalchemy import text
-        engine = get_engine(st.session_state.get('db_url'))
-        with engine.connect() as conn:
-            result = conn.execute(text(f"SELECT * FROM {table_name} LIMIT 100"))
-            rows = result.fetchall()
-            cols = result.keys()
-            if rows:
-                st.dataframe(pd.DataFrame(rows, columns=cols), use_container_width=True)
-            else:
-                st.info("Table is empty.")
-    except Exception as e:
-        st.warning(f"Could not read table: {e}")
-
-    # CSV import
-    st.markdown("---")
-    uploaded = st.file_uploader(f"📥 Import CSV into `{table_name}`", type="csv",
-                                 key=f"upload_{table_name}")
-    if uploaded:
-        st.warning("⚠️ CSV import is available for advanced users. Ensure your CSV matches the table schema.")
-        if st.button("Import", key=f"import_{table_name}"):
-            st.info("CSV import functionality requires schema validation. Coming soon!")
+db.close()

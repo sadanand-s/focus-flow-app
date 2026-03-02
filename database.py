@@ -77,8 +77,12 @@ class UserSetting(Base):
     nudge_sensitivity = Column(String(10), default="Medium")
     notification_sound = Column(Boolean, default=True)
     webcam_source = Column(Integer, default=0)
-    export_preference = Column(String(10), default="Both")  # PDF | CSV | Both
+    export_preference = Column(String(10), default="Both")
     bot_training_enabled = Column(Boolean, default=False)
+    
+    # Premium Specs
+    profile_avatar = Column(Text, nullable=True) # Base64 blob
+    premium_config = Column(JSON, default={}) # Holds accent_color, app_name, etc.
 
     user = relationship("User", back_populates="settings")
 
@@ -123,6 +127,9 @@ def get_session_factory(engine=None):
     if engine is None:
         engine = get_engine()
     return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Default Session Factory
+SessionLocal = get_session_factory()
 
 
 def init_db(engine=None):

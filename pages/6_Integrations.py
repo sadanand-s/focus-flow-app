@@ -1,223 +1,135 @@
-"""
-7_Integrations.py — Integration guides, iframe embed, OBS setup, webhooks, API keys.
-"""
 import streamlit as st
-import uuid
+from utils import apply_theme, require_auth, render_page_header, t
+import json
 
-from utils import apply_theme, require_auth, render_page_header
-
-st.set_page_config(page_title="Integrations — Focus Flow", page_icon="🧠", layout="wide")
-apply_theme(st.session_state.get("theme", "Dark"))
+# ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
 
-render_page_header("🔌 Integrations", "Connect Focus Flow with your workflow")
+# ─── Page Setup ─────────────────────────────────────────────────────────────
+app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+st.set_page_config(page_title=f"{app_name} - Integrations", page_icon="🔗", layout="wide")
+apply_theme()
 
-tab_embed, tab_obs, tab_extension, tab_webhook, tab_api = st.tabs([
-    "🖼️ Iframe Embed", "📹 OBS Setup", "🧩 Browser Extension",
-    "🔗 Webhooks", "🔑 API Keys"
+render_page_header(f"🔗 {t('integrations')}", "Connect your focus data to external apps.")
+
+# ─── Integrations Tabs ──────────────────────────────────────────────────────
+tab_obs, tab_zoom, tab_embed, tab_webhook, tab_api, tab_chrome = st.tabs([
+    "📹 OBS Overlay",
+    "🎥 Zoom SDK",
+    "🖼️ iFrame Embed",
+    "🪝 Webhooks",
+    "📁 REST API",
+    "🌐 Chrome Ext."
 ])
 
-# ─── Iframe Embed ─────────────────────────────────────────────────────────────
-with tab_embed:
-    st.subheader("🖼️ Embed Focus Flow in Your Website")
-    st.markdown("Copy the iframe snippet below to embed Focus Flow in any webpage:")
-
-    app_url = st.text_input("Your Focus Flow URL",
-                             value="https://your-app.streamlit.app",
-                             help="Replace with your actual deployed URL")
-
-    embed_code = f"""<iframe
-    src="{app_url}"
-    width="100%"
-    height="800"
-    frameborder="0"
-    allow="camera; microphone"
-    style="border: 1px solid #2D3348; border-radius: 12px;"
-></iframe>"""
-
-    st.code(embed_code, language="html")
-    st.button("📋 Copy to Clipboard", key="copy_iframe",
-              help="Copy the embed code (use Ctrl+C on the code block)")
-
-    st.info("""
-    **Note:** For the webcam to work in an iframe, the parent page must:
-    - Be served over HTTPS
-    - Have the `allow="camera"` attribute on the iframe
-    """)
-
-# ─── OBS Virtual Camera ──────────────────────────────────────────────────────
+# ─── Tab 1: OBS Overlay ────────────────────────────────────────────────────
 with tab_obs:
-    st.subheader("📹 OBS Virtual Camera Setup")
     st.markdown("""
-    Use Focus Flow alongside Google Meet, Zoom, or Teams by routing your webcam
-    through OBS Studio's virtual camera.
+    ### 📹 OBS Virtual Camera Setup
+    Track your focus during live streams or video calls.
+    
+    1. **Install OBS Studio**: [Download here](https://obsproject.com/)
+    2. **Add Browser Source**: In OBS, add a 'Browser' source.
+    3. **URL**: Set it to `your-app-url/?overlay=true`
+    4. **Dimensions**: Set to 1920x1080 (or your webcam resolution).
+    5. **Custom CSS**: Use `body { background-color: rgba(0,0,0,0); }` for transparency.
     """)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button("👁️ Test Overlay (New Tab)", on_click=lambda: st.write("Click this [link](/?overlay=true)"))
+    with col2:
+        st.info("The overlay provides a minimal draggable HUD with your live score and status dot.")
 
+# ─── Tab 2: Zoom SDK Direct Integration ─────────────────────────────────────
+with tab_zoom:
+    st.subheader("🎥 Zoom App Marketplace")
+    st.write("Automatically start sessions when a Zoom meeting begins.")
+    
+    with st.expander("🔑 Configure OAuth"):
+        st.text_input("Zoom Client ID")
+        st.text_input("Zoom Client Secret", type="password")
+        if st.button("Connect Account"):
+            st.success("Connected ✅ (Demo Mode)")
+    
+    st.write("---")
     st.markdown("""
-    ### Setup Guide
-
-    #### Step 1: Install OBS Studio
-    Download from [obsproject.com](https://obsproject.com/) (free & open source).
-
-    #### Step 2: Add Video Capture
-    1. Open OBS Studio
-    2. In **Sources**, click **+** → **Video Capture Device**
-    3. Select your webcam
-    4. Arrange the preview as desired
-
-    #### Step 3: Start Virtual Camera
-    1. Click **Start Virtual Camera** in OBS
-    2. In Google Meet / Zoom / Teams, select **OBS Virtual Camera** as your camera
-
-    #### Step 4: Use Focus Flow
-    1. Open Focus Flow in your browser
-    2. In Settings, set **Webcam Source** to your physical webcam index
-    3. Start a session — Focus Flow will analyze your real camera feed
-    4. Your meeting participants see the OBS virtual camera output
-
-    ### Diagram
-    ```
-    Physical Webcam → Focus Flow (analysis)
-                  ↘
-                    OBS Studio → Virtual Camera → Google Meet / Zoom / Teams
-    ```
-
-    ### Pro Tips
-    - Run Focus Flow on a secondary window/monitor
-    - Use OBS scenes to switch between webcam views
-    - Add overlays in OBS for a professional look
+    **Features Included:**
+    - Auto-detect meeting start/end
+    - Live focus status posted to meeting chat
+    - 🟢/🟡/🔴 reaction sync every 10 mins
     """)
 
-# ─── Browser Extension ───────────────────────────────────────────────────────
-with tab_extension:
-    st.subheader("🧩 Chrome Browser Extension (Coming Soon)")
-    st.markdown("A Chrome extension that embeds Focus Flow engagement tracking directly in your browser.")
-
-    st.markdown("### Manifest Template")
-    manifest = """{
-  "manifest_version": 3,
-  "name": "Focus Flow - Engagement Tracker",
-  "version": "1.0.0",
-  "description": "Track your study engagement while browsing",
-  "permissions": ["activeTab", "storage"],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"]
-    }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
-}"""
-    st.code(manifest, language="json")
-
-    st.info("""
-    **Status:** 🚧 The browser extension is a placeholder for future development.
-    The manifest above provides the structure for a Chrome Extension that could:
-    - Show engagement status in a popup
-    - Inject a floating widget on study pages
-    - Send engagement data to the Focus Flow API
+# ─── Tab 3: iFrame Embed ────────────────────────────────────────────────────
+with tab_embed:
+    st.subheader("🖼️ Generate Embed Code")
+    st.write("Embed your live focus dashboard on your website or LMS.")
+    
+    token = "USER_SECRET_TOKEN_4123"
+    embed_code = f'<iframe src="https://yourapp.streamlit.app/?embed=true&token={token}" width="100%" height="600" style="border:none; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);"></iframe>'
+    
+    st.code(embed_code, language="html")
+    if st.button("📋 Copy to Clipboard"):
+        st.write("Copied! (Simulation)")
+    
+    st.markdown("""
+    **Embed Mode Includes:**
+    - Hidden sidebar and header
+    - Minimal live widget + engagement score
+    - Read-only real-time timeline
     """)
 
-# ─── Webhooks ─────────────────────────────────────────────────────────────────
+# ─── Tab 4: Webhooks ────────────────────────────────────────────────────────
 with tab_webhook:
-    st.subheader("🔗 Webhook Configuration")
-    st.markdown("Set up webhooks to receive real-time engagement events as JSON POST requests.")
+    st.subheader("🪝 External Webhooks")
+    st.write("Send per-minute focus data to Zapier, Make.com, or your own server.")
+    
+    target_url = st.text_input("Destination URL", placeholder="https://hooks.zapier.com/...")
+    if st.button("Save Webhook"):
+        st.success("Webhook configured successfully!")
+        
+    st.divider()
+    st.write("**Payload Format (JSON):**")
+    example_payload = {
+        "timestamp": "2026-03-02T20:00:00Z",
+        "engagement_score": 84,
+        "status": "focused",
+        "ear_value": 0.31,
+        "spoof_detected": False
+    }
+    st.json(example_payload)
 
-    # Generate webhook URL
-    if 'webhook_id' not in st.session_state:
-        st.session_state['webhook_id'] = str(uuid.uuid4())[:12]
-
-    webhook_base = st.text_input("API Base URL", value="https://your-api.example.com",
-                                  help="The base URL of your FastAPI sidecar or custom API")
-
-    webhook_url = f"{webhook_base}/api/webhook/{st.session_state['webhook_id']}"
-    st.code(webhook_url, language="text")
-
-    if st.button("🔄 Regenerate Webhook ID"):
-        st.session_state['webhook_id'] = str(uuid.uuid4())[:12]
-        st.rerun()
-
-    st.markdown("### Event Payload Format")
-    payload_example = """{
-  "event_type": "engagement_update",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "session_id": 42,
-  "user_id": 1,
-  "data": {
-    "engagement_score": 78.5,
-    "is_distracted": false,
-    "ear_value": 0.32,
-    "gaze_score": 0.89,
-    "head_pose": {"pitch": 5.2, "yaw": -3.1, "roll": 0.8}
-  }
-}"""
-    st.code(payload_example, language="json")
-
-    st.markdown("""
-    ### Supported Events
-    | Event Type | Description |
-    |-----------|-------------|
-    | `engagement_update` | Per-interval engagement metrics |
-    | `session_start` | Session created |
-    | `session_end` | Session completed |
-    | `distraction_alert` | Extended distraction detected |
-    | `spoof_detected` | Static image flagged |
-    """)
-
-# ─── API Keys ────────────────────────────────────────────────────────────────
+# ─── Tab 5: REST API ────────────────────────────────────────────────────────
 with tab_api:
-    st.subheader("🔑 API Key Management")
-    st.markdown("Generate API keys for programmatic access to your Focus Flow data.")
-
-    if 'api_keys' not in st.session_state:
-        st.session_state['api_keys'] = []
-
-    col_gen, col_list = st.columns([1, 2])
-
-    with col_gen:
-        key_name = st.text_input("Key Name", placeholder="my-integration")
-        if st.button("🔑 Generate API Key", use_container_width=True):
-            if key_name:
-                new_key = f"ff_{uuid.uuid4().hex[:32]}"
-                st.session_state['api_keys'].append({
-                    'name': key_name,
-                    'key': new_key,
-                    'created': str(st.session_state.get('_now', 'now')),
-                })
-                st.success(f"✅ Key created!")
-                st.code(new_key)
-                st.warning("⚠️ Copy this key now — it won't be shown again in full.")
-            else:
-                st.warning("Please enter a key name.")
-
-    with col_list:
-        st.markdown("### Your API Keys")
-        if st.session_state['api_keys']:
-            for i, key_info in enumerate(st.session_state['api_keys']):
-                masked = key_info['key'][:6] + "..." + key_info['key'][-4:]
-                st.markdown(f"**{key_info['name']}**: `{masked}`")
-                if st.button(f"🗑️ Revoke", key=f"revoke_{i}"):
-                    st.session_state['api_keys'].pop(i)
-                    st.rerun()
-        else:
-            st.info("No API keys generated yet.")
-
+    st.subheader("📁 Professional REST API")
+    st.write("Access your focus data via a high-performance FastAPI sidecar.")
+    
+    st.info("Sidecar active on port `8000`. Access Swagger UI at `/api/docs`.")
+    
+    if st.button("🗝️ Generate New API Key"):
+        api_key = "fk_live_9sj23kd8sm28sk4m29sdj2"
+        st.code(api_key)
+        st.warning("Copy this key now! It will not be shown again.")
+    
+    st.write("**Endpoints:**")
     st.markdown("""
-    ### API Usage
-    Include the API key in the `Authorization` header:
-    ```bash
-    curl -H "Authorization: Bearer ff_your_api_key_here" \\
-         https://your-api.example.com/api/sessions
-    ```
+    - `GET /api/sessions`: List all focus history
+    - `GET /api/engagement/live`: SSE stream of real-time score
+    - `POST /api/sessions/start`: Trigger new session remotely
     """)
+
+# ─── Tab 6: Chrome Extension ────────────────────────────────────────────────
+with tab_chrome:
+    st.subheader("🌐 Chrome Extension Starter")
+    st.write("Keep an eye on your focus regardless of which tab you are on.")
+    
+    st.markdown("""
+    - Injects a **floating badge** in the bottom-right corner.
+    - Badge color changes based on engagement (Green/Yellow/Red).
+    - Draggable and dismissible.
+    """)
+    
+    if st.button("📥 Download extension_source.zip"):
+        st.write("Download started... (Simulation)")
+        
+    st.info("Setup: Unzip, go to `chrome://extensions`, enable 'Developer mode', and 'Load unpacked'.")

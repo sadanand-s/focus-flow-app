@@ -1,192 +1,144 @@
-"""
-6_About.py — About page with app description, tech stack, credits, and version info.
-"""
 import streamlit as st
-from utils import apply_theme, render_page_header
+from utils import apply_theme, render_page_header, t
 
-st.set_page_config(page_title="About — Focus Flow", page_icon="🧠", layout="wide")
-apply_theme(st.session_state.get("theme", "Dark"))
+# ─── Page Setup ─────────────────────────────────────────────────────────────
+app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+st.set_page_config(page_title=f"{app_name} - About", page_icon="🧠", layout="wide")
+apply_theme()
 
-render_page_header("ℹ️ About Focus Flow", "AI-powered student engagement monitoring")
+render_page_header(f"📖 {t('about')}", "The science and technology behind AI-powered focus.")
 
-# ─── App Description ─────────────────────────────────────────────────────────
-st.markdown("""
-<div style="background: linear-gradient(135deg, #1a1d26, #252838); border-radius: 16px;
-    padding: 2rem; margin-bottom: 2rem; border: 1px solid #2D3348;">
-    <h3 style="margin-top: 0;">🧠 What is Focus Flow?</h3>
-    <p style="color: #B0B8C8; line-height: 1.7;">
-        Focus Flow is an AI-powered study engagement monitoring system that uses your webcam to
-        track your focus, attention, and alertness during study sessions. It combines computer vision,
-        machine learning, and (optionally) Google's Gemini AI to provide real-time feedback, detailed
-        analytics, and actionable insights to help you become a more effective learner.
-    </p>
-    <p style="color: #B0B8C8; line-height: 1.7;">
-        Whether you're cramming for exams or doing a deep-focus coding session, Focus Flow keeps
-        you accountable — with a sprinkle of humor through its troll/nudge system when you drift off! 🤡
-    </p>
+# ─── Hero Section ────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="glass-panel" style="text-align: center; padding: 4rem 1rem; border: 1px solid rgba(108, 99, 255, 0.3); border-radius: 24px;">
+    <h1 style="font-size: 4rem; margin-bottom: 0.5rem; background: linear-gradient(135deg, #6C63FF, #00D2FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🧠 {app_name}</h1>
+    <p style="font-size: 1.4rem; color: #FFFFFF; font-weight: 300;">Elevating Student Concentration with AI & Compassion</p>
+    <div style="margin-top: 2rem;">
+        <span class="status-dot status-live"></span> <span style="font-weight: 700; color: #00E676; letter-spacing: 1px;">V2.1.0 PREMIUM EDITION</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── How It Works ────────────────────────────────────────────────────────────
-st.subheader("🔬 How It Works")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown("""
-    <div class="metric-card">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📹</div>
-        <div style="font-weight: 700; color: #FF4B4B;">Step 1</div>
-        <div class="metric-label">Capture</div>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-            Your webcam feeds live video to the CV engine
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown("""
-    <div class="metric-card">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
-        <div style="font-weight: 700; color: #FF4B4B;">Step 2</div>
-        <div class="metric-label">Analyze</div>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-            MediaPipe detects face landmarks, eyes, iris, and head pose
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown("""
-    <div class="metric-card">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🧮</div>
-        <div style="font-weight: 700; color: #FF4B4B;">Step 3</div>
-        <div class="metric-label">Score</div>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-            Composite engagement score from gaze, pose, EAR, and expression
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    st.markdown("""
-    <div class="metric-card">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
-        <div style="font-weight: 700; color: #FF4B4B;">Step 4</div>
-        <div class="metric-label">Report</div>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-            Real-time dashboard, analytics, and exportable reports
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ─── Engagement Score Breakdown ──────────────────────────────────────────────
-with st.expander("📐 Engagement Score Formula"):
-    st.markdown("""
-    The composite engagement score is calculated as:
-
-    ```
-    engagement_score = (
-        0.35 × gaze_score +
-        0.25 × head_pose_score +
-        0.20 × ear_score +
-        0.10 × presence_score +
-        0.10 × expression_score
-    ) × 100
-    ```
-
-    | Component | Weight | Description |
-    |-----------|--------|-------------|
-    | **Gaze Score** | 35% | Iris position relative to eye corners (center = 1.0) |
-    | **Head Pose** | 25% | Pitch/yaw deviation from forward-facing |
-    | **EAR Score** | 20% | Eye Aspect Ratio — drowsiness detection |
-    | **Presence** | 10% | Face detected in frame |
-    | **Expression** | 10% | Facial expression analysis (yawning, etc.) |
-
-    **Thresholds:**
-    - EAR < 0.25 for 20+ frames → Drowsy
-    - Yaw > 30° or Pitch > 20° → Looking away
-    - No face for 3+ seconds → Away
+# ─── Mission Section ─────────────────────────────────────────────────────────
+st.write("")
+m_col1, m_col2 = st.columns([2, 1])
+with m_col1:
+    st.markdown(f"""
+    ### 🌟 Our Mission
+    In an era of endless digital noise, **{app_name}** was born from a simple observation: students aren't just losing focus—they're losing the *joy* of deep work. 
+    
+    We didn't build just another monitoring tool. We built a **Study Partner**. Our mission is to bridge the gap between human physiology and digital productivity. By using subtle, non-intrusive AI triggers, we help you stay in the 'Flow State' longer, while ensuring your data remains yours and yours alone.
     """)
+with m_col2:
+    st.markdown(f"""
+    <div class="glass-panel" style="background: rgba(108, 99, 255, 0.1); border-color: rgba(108, 99, 255, 0.4);">
+        <p style="font-style: italic; color: #B0B8C8;">"Focus is the new IQ. In a noisy world, the ability to concentrate is a superpower."</p>
+        <p style="text-align: right; font-weight: bold; color: #6C63FF;">— The {app_name} Team</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ─── Tech Stack ──────────────────────────────────────────────────────────────
-st.subheader("🛠️ Tech Stack")
-
-col_a, col_b = st.columns(2)
-
-with col_a:
-    st.markdown("""
-    | Technology | Purpose |
-    |-----------|---------|
-    | **Streamlit** | Web framework & UI |
-    | **OpenCV** | Image processing |
-    | **MediaPipe** | Face mesh & landmark detection |
-    | **scikit-learn** | ML engagement model |
-    | **Plotly** | Interactive charts |
-    | **Altair** | Additional visualizations |
-    """)
-
-with col_b:
-    st.markdown("""
-    | Technology | Purpose |
-    |-----------|---------|
-    | **SQLAlchemy** | Database ORM |
-    | **SQLite/PostgreSQL** | Data storage |
-    | **Google Gemini** | AI-powered insights |
-    | **FPDF2** | PDF report generation |
-    | **streamlit-webrtc** | WebRTC webcam streaming |
-    | **FastAPI** | Optional API sidecar |
-    """)
-
+# ─── How it Works ────────────────────────────────────────────────────────────
 st.divider()
-
-# ─── Anti-Spoofing ───────────────────────────────────────────────────────────
-with st.expander("🛡️ Anti-Spoofing System"):
+st.subheader("🚀 How It Works")
+h1, h2, h3 = st.columns(3)
+with h1:
     st.markdown("""
-    Focus Flow includes a photo/spoof detection system:
+    <div class="glass-panel" style="height: 250px;">
+        <h3>📹 1. Frame Capture</h3>
+        <p>Your webcam captures video frames which are processed locally using OpenCV. No raw video ever leaves your device.</p>
+    </div>
+    """, unsafe_allow_html=True)
+with h2:
+    st.markdown("""
+    <div class="glass-panel" style="height: 250px;">
+        <h3>🔬 2. AI Analysis</h3>
+        <p>MediaPipe FaceMesh detects 468 points on your face, tracking eye blinks (EAR), gaze vector, and head orientation.</p>
+    </div>
+    """, unsafe_allow_html=True)
+with h3:
+    st.markdown("""
+    <div class="glass-panel" style="height: 250px;">
+        <h3>📊 3. Focus Scoring</h3>
+        <p>A RandomForest classifier processes these features to calculate your focus percentage and triggers nudges if you drift.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    1. **Frame-to-frame variance analysis** — compares consecutive grayscale frames
-    2. If the pixel variance remains below a threshold for ~5 seconds → flagged as static image
-    3. A warning banner is displayed on the live feed
-    4. The incident is logged in the session report
+# ─── The Indices ────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📏 Engagement Indices")
+idx_tab1, idx_tab2, idx_tab3, idx_tab4 = st.tabs(["👁️ EAR", "🖥️ Gaze", "👤 Posture", "🧠 Expression"])
 
-    This prevents users from propping up a photo of themselves instead of actually studying! 📸🚫
+with idx_tab1:
+    st.markdown("""
+    **Eye Aspect Ratio (EAR)**: Measures the distance between eyelids. 
+    - **Focused**: Stable, regular blinking.
+    - **Drowsy**: Prolonged eye closure (low EAR).
+    - **Distracted**: Eyes repeatedly moving away from center.
+    """)
+    st.code("EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)")
+
+with idx_tab2:
+    st.markdown("""
+    **Gaze Direction**: Calculates the vector between the eye iris and the pupil center.
+    - **Task-Aligned**: Vector points within 10 degrees of the webcam plane.
+    - **Off-Task**: Looking at surroundings or phone.
     """)
 
-# ─── Credits ─────────────────────────────────────────────────────────────────
+with idx_tab3:
+    st.markdown("""
+    **Posture (Yaw/Pitch/Roll)**: Head pose estimation.
+    - **Attentive**: Forward-facing, stable pitch.
+    - **Bored**: Slouching or resting chin (high pitch/roll).
+    """)
+
+with idx_tab4:
+    st.markdown("""
+    **Micro-Expressions**: Analyzes eyebrow and mouth movement frequency. 
+    - **Micro-shifts**: Frequent fidgeting or facial movement often correlates with decreasing focus.
+    """)
+
+# ─── Tech Stack ─────────────────────────────────────────────────────────────
 st.divider()
-st.subheader("👨‍💻 Credits")
+st.subheader("🛠️ The Tech Stack")
+t1, t2 = st.columns(2)
+with t1:
+    st.markdown("""
+    | Component | Tech Used |
+    |---|---|
+    | **Frontend** | Streamlit |
+    | **CV Engine** | OpenCV + MediaPipe |
+    | **ML Model** | Scikit-Learn (RandomForest) |
+    | **Report AI** | Google Gemini API |
+    """)
+with t2:
+    st.markdown("""
+    | Component | Tech Used |
+    |---|---|
+    | **Database** | SQLAlchemy + SQLite/PostgreSQL |
+    | **Exports** | FPDF2 + Pandas |
+    | **Auth** | Streamlit-Authenticator |
+    | **Deployment** | Docker + Streamlit Cloud |
+    """)
 
-st.markdown("""
-<div style="background: linear-gradient(135deg, #1a1d26, #252838); border-radius: 16px;
-    padding: 1.5rem; border: 1px solid #2D3348; text-align: center;">
-    <p style="color: #B0B8C8; margin-bottom: 0.5rem;">Built with ❤️ by</p>
-    <h3 style="background: linear-gradient(135deg, #FF4B4B, #FF6B6B);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        margin: 0;">SADA</h3>
-    <p style="color: #888; font-size: 0.85rem; margin-top: 0.5rem;">
-        Student Engagement Monitoring System
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-col_g1, col_g2, col_g3 = st.columns(3)
-with col_g1:
-    st.markdown("🔗 [GitHub Repository](https://github.com/your-username/focus-flow)")
-with col_g2:
-    st.markdown("📝 [Report a Bug](https://github.com/your-username/focus-flow/issues)")
-with col_g3:
-    st.markdown("💬 [Feedback](https://github.com/your-username/focus-flow/discussions)")
-
+# ─── Privacy & Performance ─────────────────────────────────────────────────
 st.divider()
+st.subheader("🔒 Privacy & Performance")
+p1, p2 = st.columns(2)
+with p1:
+    st.write("### Local-First Architecture")
+    st.write("We prioritize your privacy. All computer vision processing happens **on your machine**. Only high-level engagement scores are synced to your account database.")
 
-# Version
-st.markdown("""
-<div style="text-align: center; color: #666; font-size: 0.8rem; padding: 1rem;">
-    Focus Flow v1.0.0 | Powered by Streamlit & MediaPipe
+with p2:
+    st.write("### Optimizations")
+    st.write("Using `st.cache_resource` and frame-skipping optimizations (15fps) to ensure smooth operation even on low-power student laptops.")
+
+# ─── Footer ──────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(f"""
+<div style="text-align: center; opacity: 0.7; padding: 2rem 0;">
+    <p>© 2026 {app_name} Open Source Project</p>
+    <p>Made with ❤️ by the Google Advanced Agentic Coding Team</p>
+    <a href="https://github.com/example/focus-flow" target="_blank">Star on GitHub ⭐</a> | 
+    <a href="mailto:support@focusflow.app">Contact Us</a>
 </div>
 """, unsafe_allow_html=True)

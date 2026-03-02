@@ -1,17 +1,19 @@
-credentials:
-  usernames:
-    student:
-      email: student@focusflow.app
-      name: Student User
-      password: $2b$12$JulP5jIW557cpezUHh02fu088EBA3brJfQKLM.vjc1kdcNxVUWes2
-    demo:
-      email: demo@focusflow.app
-      name: Demo User
-      password: $2b$12$JulP5jIW557cpezUHh02fu088EBA3brJfQKLM.vjc1kdcNxVUWes2
 cookie:
   expiry_days: 30
   key: focus_flow_engagement_monitor_secret_key_2024
   name: focus_flow_auth_cookie
+credentials:
+  usernames:
+    demo:
+      email: demo@focusflow.app
+      name: Demo User
+      password: $2b$12$JulP5jIW557cpezUHh02fu088EBA3brJfQKLM.vjc1kdcNxVUWes2
+    student:
+      email: student@focusflow.app
+      failed_login_attempts: 0
+      logged_in: true
+      name: Student User
+      password: $2b$12$JulP5jIW557cpezUHh02fu088EBA3brJfQKLM.vjc1kdcNxVUWes2
 pre-authorized:
   emails:
-    - admin@focusflow.app
+  - admin@focusflow.app
