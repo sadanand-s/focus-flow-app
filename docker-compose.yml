@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  # ─── Focus Flow App ──────────────────────────────────────────
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=sqlite:///focus_flow.db
+      # Uncomment below for PostgreSQL:
+      # - DATABASE_URL=postgresql://focusflow:password@db:5432/focusflow
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+
+  # ─── Optional: PostgreSQL Database ──────────────────────────
+  # Uncomment to use PostgreSQL instead of SQLite
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: focusflow
+  #     POSTGRES_USER: focusflow
+  #     POSTGRES_PASSWORD: password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pg_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+  # ─── Optional: FastAPI Sidecar ──────────────────────────────
+  # Uncomment to enable API endpoints
+  # api:
+  #   build: .
+  #   command: uvicorn api_sidecar:app --host 0.0.0.0 --port 8000
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - DATABASE_URL=sqlite:///focus_flow.db
+  #   restart: unless-stopped
+
+  # ─── Optional: Nginx Reverse Proxy ─────────────────────────
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/conf.d/default.conf
+  #   depends_on:
+  #     - app
+  #   restart: unless-stopped
+
+volumes:
+  app_data:
+  # pg_data:

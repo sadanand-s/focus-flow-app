@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', 'Inter', sans-serif;
+    }
+
+    #trollBtn {
+      position: absolute;
+      padding: 16px 36px;
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #FF4B4B, #FF6B6B);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 6px 24px rgba(255, 75, 75, 0.4);
+      letter-spacing: 2px;
+      z-index: 10;
+      transition: transform 0.15s, box-shadow 0.15s;
+      user-select: none;
+    }
+
+    #trollBtn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 8px 32px rgba(255, 75, 75, 0.6);
+    }
+
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: explode 0.8s ease-out forwards;
+    }
+
+    @keyframes explode {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(0);
+        opacity: 0;
+      }
+    }
+
+    @keyframes popScale {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.6);
+      }
+
+      100% {
+        transform: scale(0);
+        opacity: 0;
+      }
+    }
+
+    #trail {
+      position: absolute;
+      pointer-events: none;
+      z-index: 5;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="trail"></div>
+  <button id="trollBtn">✨ CLICK ME ✨</button>
+
+  <script>
+    (function () {
+      const btn = document.getElementById('trollBtn');
+      const trail = document.getElementById('trail');
+      let x, y, dx, dy, btnW, btnH, caught = false;
+
+      function init() {
+        const rect = btn.getBoundingClientRect();
+        btnW = rect.width;
+        btnH = rect.height;
+        x = (window.innerWidth - btnW) / 2;
+        y = (window.innerHeight - btnH) / 2;
+        dx = 3 + Math.random() * 2;
+        dy = 2.5 + Math.random() * 2;
+        btn.style.left = x + 'px';
+        btn.style.top = y + 'px';
+        requestAnimationFrame(animate);
+      }
+
+      function animate() {
+        if (caught) return;
+        x += dx;
+        y += dy;
+
+        // Bounce off walls
+        if (x + btnW > window.innerWidth || x < 0) {
+          dx = -dx;
+          x = Math.max(0, Math.min(x, window.innerWidth - btnW));
+        }
+        if (y + btnH > window.innerHeight || y < 0) {
+          dy = -dy;
+          y = Math.max(0, Math.min(y, window.innerHeight - btnH));
+        }
+
+        btn.style.left = x + 'px';
+        btn.style.top = y + 'px';
+
+        // Motion trail
+        if (Math.random() < 0.3) {
+          const dot = document.createElement('div');
+          dot.style.cssText = `position:absolute;left:${x + btnW / 2}px;top:${y + btnH / 2}px;
+        width:6px;height:6px;border-radius:50%;background:rgba(255,75,75,0.3);
+        pointer-events:none;transition:opacity 0.5s;`;
+          trail.appendChild(dot);
+          setTimeout(() => { dot.style.opacity = '0'; }, 100);
+          setTimeout(() => { if (dot.parentNode) dot.remove(); }, 600);
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      btn.addEventListener('click', function (e) {
+        if (caught) return;
+        caught = true;
+
+        // Particle explosion
+        const colors = ['#FF4B4B', '#FFD700', '#00D26A', '#4BAFFF', '#FF6BFF'];
+        const cx = x + btnW / 2;
+        const cy = y + btnH / 2;
+        for (let i = 0; i < 20; i++) {
+          const p = document.createElement('div');
+          p.className = 'particle';
+          const size = 5 + Math.random() * 12;
+          const angle = (Math.PI * 2 * i) / 20;
+          const dist = 40 + Math.random() * 80;
+          const tx = cx + Math.cos(angle) * dist;
+          const ty = cy + Math.sin(angle) * dist;
+          p.style.cssText = `left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;
+        background:${colors[i % colors.length]};
+        transition: left 0.6s ease-out, top 0.6s ease-out;`;
+          document.body.appendChild(p);
+          requestAnimationFrame(() => {
+            p.style.left = tx + 'px';
+            p.style.top = ty + 'px';
+          });
+          setTimeout(() => p.remove(), 800);
+        }
+
+        // Pop effect on button
+        btn.innerHTML = '🎉 P O P ! 🎉';
+        btn.style.background = 'linear-gradient(135deg, #00D26A, #4BAFFF)';
+        btn.style.animation = 'popScale 0.6s ease-out forwards';
+
+        // Signal to Streamlit parent
+        setTimeout(() => {
+          try {
+            // Method 1: postMessage (most reliable in iframes)
+            window.parent.postMessage({ type: 'troll_caught', caught: true }, '*');
+          } catch (e) { }
+          try {
+            // Method 2: Query params
+            const params = new URLSearchParams(window.parent.location.search);
+            params.set('caught', 'true');
+            window.parent.location.search = params.toString();
+          } catch (e) {
+            // Method 3: Visual signal for manual skip
+            btn.innerHTML = '✅ Done! Click "I Caught It!" below';
+            btn.style.animation = 'none';
+            btn.style.transform = 'scale(1)';
+            btn.style.opacity = '1';
+          }
+        }, 700);
+      });
+
+      setTimeout(init, 50);
+    })();
+  </script>
+</body>
+
+</html>
