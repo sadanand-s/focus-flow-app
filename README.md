@@ -91,7 +91,7 @@ Our **Unified Engagement Index (UEI)** combines five key metrics to derive your 
 ---
 
 ### ❤️ Author & Inspiration
-Created by **SADA** with the goal of helping students worldwide build the habit of deep focus. 
+Created by **SADANAND** with the goal of helping students worldwide build the habit of deep focus. 
 
 > "Efficiency is doing things right; effectiveness is doing the right things." — Peter Drucker. **Focus on what matters.**
 
