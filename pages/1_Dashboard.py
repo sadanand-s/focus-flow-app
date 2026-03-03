@@ -4,7 +4,6 @@ Fixed: WebRTC initialization, session DB handling, spoof detection escalation,
        troll system integration, distraction tracking.
 """
 import streamlit as st
-import streamlit.components.v1 as components
 import time
 import threading
 import numpy as np
@@ -13,7 +12,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 from utils import apply_theme, require_auth, render_page_header, render_metric_card, get_current_user_id, format_duration
-from database import get_db, StudySession, EngagementLog, init_db
+from database import get_db, StudySession, init_db, save_engagement_log
 from troll_system import check_and_trigger
 
 # ─── WebRTC Import (graceful fallback) ───────────────────────────────────────
@@ -26,6 +25,10 @@ try:
 except ImportError as _e:
     HAS_WEBRTC = False
     _WEBRTC_ERR = str(_e)
+
+# Python 3.14 Compatibility Layer
+import sys
+IS_314 = sys.version_info.major == 3 and sys.version_info.minor == 14
 
 # ─── Page Setup ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Dashboard — Focus Flow", page_icon="🧠", layout="wide")
@@ -109,6 +112,68 @@ if HAS_WEBRTC:
 
 # ─── Layout ──────────────────────────────────────────────────────────────────
 col_feed, col_controls = st.columns([3, 2])
+ctx = None
+
+# ── Webcam Feed ───────────────────────────────────────────────────────────────
+with col_feed:
+    st.subheader("📹 Live Feed")
+
+    if not HAS_WEBRTC:
+        st.error(f"""
+        **Camera unavailable** — `streamlit-webrtc` or `av` package is missing.
+
+        Install with:
+        ```bash
+        pip install streamlit-webrtc av opencv-python-headless
+        ```
+        """)
+    else:
+        # WebRTC streamer
+        ctx = webrtc_streamer(
+            key="engagement_feed",
+            mode=WebRtcMode.SENDRECV,
+            rtc_configuration=RTC_CONFIG,
+            video_processor_factory=EngagementVideoProcessor,
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
+
+        # Spoof banner
+        if st.session_state.get('spoof_count', 0) > 5:
+            st.warning("⚠️ **Static image detected.** Please ensure you are visible and moving.")
+
+        if ctx and hasattr(ctx, 'video_processor') and ctx.video_processor:
+            latest = ctx.video_processor.get_latest()
+            if latest and 'engagement_score' in latest:
+                score = float(latest.get('engagement_score', 0))
+                ts = time.time()
+                # Initial state updates
+                if score > 0:
+                    st.session_state['live_stats']['scores'].append(score)
+                    st.session_state['live_stats']['timestamps'].append(ts)
+                
+                # Auto-sync data to session state for fragment
+                st.session_state['latest_processor_data'] = latest
+
+        # Python 3.14 Warning
+        if IS_314:
+            st.warning("⚠️ **Python 3.14 (Beta) Detected.** Streamlit features like 'Auto-Refresh' and 'WebRTC' may be unstable. If the camera freezes, click: 👇")
+            if st.button("🔄 Sync Camera Data", use_container_width=True):
+                st.rerun()
+
+        # Camera help text
+        if ctx and not ctx.state.playing:
+            st.markdown("""
+            <div style="background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);
+                border-radius:12px;padding:1rem;margin-top:0.5rem;">
+                <b>🎥 Camera Tips:</b>
+                <ul style="margin:0.5rem 0 0 1rem;color:#9E9E9E;font-size:0.9rem;">
+                    <li>Click <b>START</b> above to enable your webcam</li>
+                    <li>Allow camera permission in your browser</li>
+                    <li>Make sure no other app is using your camera</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ── Session Controls ─────────────────────────────────────────────────────────
 with col_controls:
@@ -224,221 +289,174 @@ with col_controls:
 
     st.divider()
 
-    # ─── Live Metrics ─────────────────────────────────────────────
-    st.subheader("📊 Live Metrics")
-
-    stats = st.session_state['live_stats']
-    if stats['scores']:
-        recent = stats['scores'][-30:]
-        current_score = stats['scores'][-1]
-        avg_score = sum(recent) / len(recent)
-
-        # Color-coded score gauge
-        score_color = "#00E676" if current_score >= 70 else ("#FFD600" if current_score >= 40 else "#FF5252")
-        st.markdown(f"""
-        <div style="text-align:center;margin-bottom:1rem;">
-            <div style="font-size:3rem;font-weight:900;color:{score_color};
-                text-shadow:0 0 20px {score_color}44;
-                font-family:'JetBrains Mono',monospace;">
-                {current_score:.0f}%
-            </div>
-            <div style="color:#9E9E9E;font-size:0.85rem;">Current Engagement</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        m1, m2 = st.columns(2)
-        with m1:
-            render_metric_card("Avg (30s)", f"{avg_score:.0f}%", "📊")
-        with m2:
-            render_metric_card("Distractions", f"{stats['distractions']}", "⚡")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        m3, m4 = st.columns(2)
-        with m3:
-            dur = format_duration(time.time() - st.session_state['session_start_ts']) if st.session_state.get('session_start_ts') else "0s"
-            render_metric_card("Duration", dur, "⏱️")
-        with m4:
-            peak = max(stats['scores']) if stats['scores'] else 0
-            render_metric_card("Peak", f"{peak:.0f}%", "🏆")
-    else:
-        st.info("📹 Start a session and enable your webcam to see live metrics.")
-        if not HAS_WEBRTC:
-            st.warning("⚠️ `streamlit-webrtc` is not installed. Run: `pip install streamlit-webrtc av`")
-
-
-# ── Webcam Feed ───────────────────────────────────────────────────────────────
-with col_feed:
-    st.subheader("📹 Live Feed")
-
-    if not HAS_WEBRTC:
-        st.error(f"""
-        **Camera unavailable** — `streamlit-webrtc` or `av` package is missing.
-
-        Install with:
-        ```bash
-        pip install streamlit-webrtc av opencv-python-headless
-        ```
-        """)
-    else:
-        # Spoof banner (shown outside the webrtc widget area)
-        spoof_count = st.session_state.get('spoof_count', 0)
-        dismissed_at = st.session_state.get('spoof_banner_dismissed_at', 0)
-        show_banner = spoof_count > 0 and (
-            not st.session_state.get('spoof_banner_dismissed') or
-            (time.time() - dismissed_at) > 60
-        )
-        if show_banner:
-            bcol1, bcol2 = st.columns([8, 1])
-            with bcol1:
-                st.warning("⚠️ **Static image detected.** FocusTrack needs your real face to work accurately.")
-            with bcol2:
-                if st.button("✕", key="dismiss_spoof"):
-                    st.session_state['spoof_banner_dismissed'] = True
-                    st.session_state['spoof_banner_dismissed_at'] = time.time()
-                    st.rerun()
-
-        # WebRTC streamer
-        ctx = webrtc_streamer(
-            key="engagement_feed",
-            mode=WebRtcMode.SENDRECV,
-            rtc_configuration=RTC_CONFIG,
-            video_processor_factory=EngagementVideoProcessor,
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
-
-        if ctx.video_processor:
+    # ─── Live Metrics & Chart Fragment ──────────────────────────────
+    @st.fragment(run_every=2)
+    def render_live_dashboard():
+        st.subheader("📊 Live Metrics")
+        
+        # Pull latest from processor if active
+        latest = None
+        if ctx and hasattr(ctx, 'video_processor') and ctx.video_processor:
             latest = ctx.video_processor.get_latest()
-            if latest and 'engagement_score' in latest:
-                score = float(latest.get('engagement_score', 0))
-                ts = time.time()
+        elif st.session_state.get('latest_processor_data'):
+            latest = st.session_state['latest_processor_data']
 
-                # Update live stats
-                st.session_state['live_stats']['scores'].append(score)
-                st.session_state['live_stats']['timestamps'].append(ts)
-                if latest.get('gaze_score') is not None:
-                    st.session_state['live_stats']['gaze_scores'].append(
-                        float(latest['gaze_score']))
-                if latest.get('ear') is not None:
-                    st.session_state['live_stats']['ear_values'].append(
-                        float(latest['ear']))
+        if latest and 'engagement_score' in latest:
+            score = float(latest.get('engagement_score', 0))
+            ts = time.time()
 
-                # Distraction tracking
-                if latest.get('is_distracted', False):
-                    if st.session_state.get('distraction_start_time') is None:
-                        st.session_state['distraction_start_time'] = ts
+            # Update live stats
+            st.session_state['live_stats']['scores'].append(score)
+            st.session_state['live_stats']['timestamps'].append(ts)
+            
+            # Keep only last 10 minutes of live data in memory
+            if len(st.session_state['live_stats']['scores']) > 600:
+                st.session_state['live_stats']['scores'] = st.session_state['live_stats']['scores'][-600:]
+                st.session_state['live_stats']['timestamps'] = st.session_state['live_stats']['timestamps'][-600:]
+
+            # Update distractions
+            if latest.get('is_distracted', False):
+                if st.session_state.get('distraction_start_time') is None:
+                    st.session_state['distraction_start_time'] = ts
+                if st.session_state.get('current_session_id'):
+                    st.session_state['live_stats']['distractions'] += 1
+            else:
+                st.session_state['distraction_start_time'] = None
+            
+            # Spoof handling
+            if latest.get('is_spoof', False):
+                st.session_state['spoof_count'] = st.session_state.get('spoof_count', 0) + 1
+                if st.session_state['spoof_count'] == 3:
+                    st.toast("📸 Still a photo? Your camera deserves better.", icon="😏")
+
+                    # Persist logs to DB (throttled)
                     if st.session_state.get('current_session_id'):
-                        st.session_state['live_stats']['distractions'] += 1
-                else:
-                    st.session_state['distraction_start_time'] = None
+                        now = time.time()
+                        last_log = st.session_state.get("last_log_ts", 0)
+                        if now - last_log >= 2:
+                            metrics = {
+                                "ear": latest.get("ear", 0.0),
+                                "pitch": latest.get("pitch", 0.0),
+                                "yaw": latest.get("yaw", 0.0),
+                                "roll": latest.get("roll", 0.0),
+                                "gaze_score": latest.get("gaze_score", 0.0),
+                                "expression_score": latest.get("expression_score", 1.0),
+                                "engagement_score": latest.get("engagement_score", 0.0),
+                                "is_distracted": latest.get("is_distracted", False),
+                                "is_spoof": latest.get("is_spoof", False),
+                            }
+                            try:
+                                db = next(get_db(st.session_state.get("db_url")))
+                                save_engagement_log(db, st.session_state['current_session_id'], metrics)
+                                db.close()
+                                st.session_state["last_log_ts"] = now
+                            except Exception:
+                                # Avoid spamming errors in the UI; just skip this log cycle
+                                st.session_state["last_log_ts"] = now
+            
+            # Troll / Nudge check
+            if st.session_state.get('distraction_start_time') and st.session_state.get('current_session_id'):
+                dist_secs = time.time() - st.session_state['distraction_start_time']
+                troll_result = check_and_trigger(
+                    dist_secs,
+                    sensitivity=st.session_state.get('nudge_sensitivity', 'Medium'),
+                    troll_mode=st.session_state.get('troll_mode', True),
+                    nudge_only=st.session_state.get('nudge_only', False),
+                )
+                if troll_result['should_trigger'] and troll_result['html']:
+                    st.markdown(troll_result['html'], unsafe_allow_html=True)
 
-                # Spoof handling
-                if latest.get('is_spoof', False):
-                    prev_count = st.session_state.get('spoof_count', 0)
-                    st.session_state['spoof_count'] = prev_count + 1
-                    sc = st.session_state['spoof_count']
+        stats = st.session_state['live_stats']
+        if stats['scores']:
+            recent = stats['scores'][-15:]
+            current_score = stats['scores'][-1]
+            avg_score = sum(recent) / len(recent)
 
-                    if sc == 2:
-                        st.toast("📸 Still a photo? Your camera deserves better.", icon="😏")
-                    elif sc >= 3:
-                        # Show modal via HTML
-                        components.html("""
-                        <div id="spoof-modal" style="
-                            position:fixed;top:0;left:0;width:100%;height:100%;
-                            background:rgba(0,0,0,0.7);z-index:99999;
-                            display:flex;align-items:center;justify-content:center;">
-                          <div style="background:#1A1D27;border:1px solid #FF5252;
-                              border-radius:16px;padding:2rem;max-width:400px;text-align:center;
-                              color:white;box-shadow:0 0 40px rgba(255,82,82,0.3);">
-                            <div style="font-size:3rem;margin-bottom:1rem;">👀</div>
-                            <h3 style="color:#FF5252;margin-bottom:1rem;">
-                              Static Image Detected 3+ Times
-                            </h3>
-                            <p style="color:#9E9E9E;margin-bottom:1.5rem;">
-                              Your engagement data may not be accurate.
-                              This will be noted in your final report.
-                            </p>
-                            <button onclick="document.getElementById('spoof-modal').remove()"
-                              style="background:linear-gradient(135deg,#6C63FF,#00D2FF);
-                              color:white;border:none;padding:10px 24px;border-radius:50px;
-                              cursor:pointer;font-weight:700;">
-                              Got it, I'll fix it
-                            </button>
-                          </div>
-                        </div>
-                        """, height=1)
-
-        # Troll / Nudge check
-        if st.session_state.get('distraction_start_time') and st.session_state.get('current_session_id'):
-            dist_secs = time.time() - st.session_state['distraction_start_time']
-
-            # 5-minute soft nudge banner
-            if dist_secs >= 300:
-                st.info("💡 You've been away for 5 minutes. A 2-minute stretch might help!")
-
-            # Troll event check
-            troll_result = check_and_trigger(
-                dist_secs,
-                sensitivity=st.session_state.get('nudge_sensitivity', 'Medium'),
-                troll_mode=st.session_state.get('troll_mode', True),
-                nudge_only=st.session_state.get('nudge_only', False),
-            )
-            if troll_result['should_trigger'] and troll_result['html']:
-                components.html(troll_result['html'], height=300, scrolling=False)
-
-        # Camera help text
-        if not ctx.state.playing:
-            st.markdown("""
-            <div style="background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);
-                border-radius:12px;padding:1rem;margin-top:0.5rem;">
-                <b>🎥 Camera Tips:</b>
-                <ul style="margin:0.5rem 0 0 1rem;color:#9E9E9E;font-size:0.9rem;">
-                    <li>Click <b>START</b> above to enable your webcam</li>
-                    <li>Allow camera permission when prompted by your browser</li>
-                    <li>Make sure no other app is using your camera</li>
-                    <li>If camera fails, try refreshing and allowing permission again</li>
-                </ul>
+            score_color = "#00E676" if current_score >= 70 else ("#FFD600" if current_score >= 40 else "#FF5252")
+            st.markdown(f"""
+            <div style="text-align:center;margin-bottom:1rem;">
+                <div style="font-size:3.5rem;font-weight:900;color:{score_color};
+                    text-shadow:0 0 20px {score_color}44;
+                    font-family:'JetBrains Mono',monospace;">
+                    {current_score:.0f}%
+                </div>
+                <div style="color:#9E9E9E;font-size:0.85rem;">Current Engagement</div>
             </div>
             """, unsafe_allow_html=True)
 
+            m1, m2 = st.columns(2)
+            with m1:
+                render_metric_card("Avg (15s)", f"{avg_score:.0f}%", "📊")
+            with m2:
+                render_metric_card("Distractions", f"{stats['distractions']}", "⚡")
 
-# ─── Live Chart ───────────────────────────────────────────────────────────────
-st.divider()
-st.subheader("📈 Engagement Timeline")
+            st.markdown("<br>", unsafe_allow_html=True)
 
-stats = st.session_state['live_stats']
-focused_threshold = st.session_state.get('focused_threshold', 70)
-distracted_threshold = st.session_state.get('distracted_threshold', 40)
+            m3, m4 = st.columns(2)
+            with m3:
+                dur = format_duration(time.time() - st.session_state['session_start_ts']) if st.session_state.get('session_start_ts') else "0s"
+                render_metric_card("Duration", dur, "⏱️")
+            with m4:
+                peak = max(stats['scores']) if stats['scores'] else 0
+                render_metric_card("Peak", f"{peak:.0f}%", "🏆")
+        else:
+            st.info("📹 Start a session and enable your webcam to see live metrics.")
+            if not HAS_WEBRTC:
+                st.warning("⚠️ `streamlit-webrtc` is not installed. Run: `pip install streamlit-webrtc av`")
 
-if len(stats['scores']) > 2:
-    chart_df = pd.DataFrame({
-        'Time': pd.to_datetime(stats['timestamps'][-150:], unit='s'),
-        'Engagement': stats['scores'][-150:],
-    })
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=chart_df['Time'], y=chart_df['Engagement'],
-        mode='lines', name='Engagement %',
-        line=dict(color='#6C63FF', width=2.5),
-        fill='tozeroy', fillcolor='rgba(108,99,255,0.08)',
-    ))
-    fig.add_hline(y=focused_threshold, line_dash="dot", line_color="#00E676",
-                  annotation_text=f"Focused ({focused_threshold}%)",
-                  annotation_font_color="#00E676")
-    fig.add_hline(y=distracted_threshold, line_dash="dot", line_color="#FF5252",
-                  annotation_text=f"Distracted ({distracted_threshold}%)",
-                  annotation_font_color="#FF5252")
-    fig.update_layout(
-        yaxis=dict(range=[0, 105], gridcolor='rgba(255,255,255,0.05)'),
-        xaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(26,29,39,0.5)',
-        height=280,
-        margin=dict(l=0, r=0, t=20, b=0),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("📊 Engagement chart will appear once the session starts and webcam is active.")
+        # Live Chart
+        st.divider()
+        st.subheader("📈 Engagement Timeline")
+        focused_threshold = st.session_state.get('focused_threshold', 70)
+        distracted_threshold = st.session_state.get('distracted_threshold', 40)
+
+        if len(stats['scores']) > 2:
+            chart_df = pd.DataFrame({
+                'Time': pd.to_datetime(stats['timestamps'][-150:], unit='s'),
+                'Engagement': stats['scores'][-150:],
+            })
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=chart_df['Time'], y=chart_df['Engagement'],
+                mode='lines', name='Engagement %',
+                line=dict(color='#6C63FF', width=2.5),
+                fill='tozeroy', fillcolor='rgba(108,99,255,0.08)',
+            ))
+            fig.add_hline(y=focused_threshold, line_dash="dot", line_color="#00E676")
+            fig.add_hline(y=distracted_threshold, line_dash="dot", line_color="#FF5252")
+            fig.update_layout(
+                yaxis=dict(range=[0, 105], gridcolor='rgba(255,255,255,0.05)'),
+                xaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
+                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(26,29,39,0.5)', height=280,
+                margin=dict(l=0, r=0, t=20, b=0),
+                legend=dict(orientation='h', yanchor='bottom', y=1.02),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # AI Insight button
+            if st.button("🤖 AI Analysis (This Session)", use_container_width=True):
+                from gemini_utils import generate_session_summary
+                api_key = st.session_state.get("settings_config", {}).get("gemini_api_key", "")
+                if api_key:
+                    with st.spinner("AI analyzing your current session..."):
+                        summary = generate_session_summary(api_key, {
+                            "name": "Live Analysis", "avg_engagement": avg_score,
+                            "peak_engagement": peak, "distractions": stats['distractions'],
+                            "duration": (time.time() - st.session_state['session_start_ts']) / 60
+                        })
+                        st.markdown(f"""
+                        <div class="glass-panel" style="margin-top:1rem;">
+                            <h4>🤖 AI Couch Analysis</h4>
+                            {summary}
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.warning("Please add a Gemini API key in Settings for AI analysis!")
+        else:
+            st.info("📊 Timeline will update once session data is recorded.")
+
+    render_live_dashboard()
+
+
+# Footer or extra logic can go here

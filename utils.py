@@ -355,6 +355,46 @@ def require_auth():
         """, unsafe_allow_html=True)
         st.stop()
 
+    # Sync user settings from DB once per session
+    if not st.session_state.get("_settings_loaded"):
+        try:
+            from database import get_db, User, UserSetting
+
+            db = next(get_db(st.session_state.get("db_url")))
+            username = st.session_state.get("username")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if not user:
+                    user = User(username=username, email=f"{username}@focusflow.app")
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
+                if not user.settings:
+                    user.settings = UserSetting(user_id=user.id)
+                    db.commit()
+
+                settings_obj = user.settings
+                if settings_obj and settings_obj.extra_config:
+                    existing = st.session_state.get("settings_config", {})
+                    st.session_state["settings_config"] = {**existing, **settings_obj.extra_config}
+
+                st.session_state["troll_mode"] = bool(settings_obj.troll_mode) if settings_obj else st.session_state.get("troll_mode", True)
+                st.session_state["nudge_only"] = bool(settings_obj.nudge_only) if settings_obj else st.session_state.get("nudge_only", False)
+                if settings_obj and settings_obj.theme:
+                    st.session_state["theme"] = settings_obj.theme
+                if settings_obj and settings_obj.nudge_sensitivity:
+                    st.session_state["nudge_sensitivity"] = settings_obj.nudge_sensitivity
+                if settings_obj:
+                    st.session_state["notification_sound"] = settings_obj.notification_sound
+                    st.session_state["webcam_source"] = settings_obj.webcam_source
+                    st.session_state["export_preference"] = settings_obj.export_preference
+                    st.session_state["bot_training_enabled"] = settings_obj.bot_training_enabled
+            db.close()
+            st.session_state["_settings_loaded"] = True
+        except Exception:
+            # Non-fatal: settings will fall back to defaults
+            st.session_state["_settings_loaded"] = True
+
 
 def get_current_user_id(db):
     """Get (or create) the User row for the logged-in username."""
@@ -492,6 +532,8 @@ def init_session_defaults():
         "spoof_banner_dismissed_at": 0,
         "mood_checked": False,
         "mood_score": None,
+        "_settings_loaded": False,
+        "last_log_ts": 0,
     }
     # Consolidation for legacy pages
     if "settings_config" not in st.session_state:

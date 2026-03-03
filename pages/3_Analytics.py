@@ -9,7 +9,7 @@ from utils import (
     apply_theme, require_auth, render_page_header, 
     render_metric_card, get_current_user_id, t
 )
-from database import SessionLocal, StudySession, EngagementLog
+from database import get_db, StudySession, EngagementLog
 
 # ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
@@ -22,7 +22,7 @@ apply_theme()
 render_page_header(f"📊 {t('analytics')}", "Analyze your deep focus trends and patterns.")
 
 # ─── Data Loading ────────────────────────────────────────────────────────────
-db = SessionLocal()
+db = next(get_db(st.session_state.get("db_url")))
 u_id = get_current_user_id(db)
 sessions = db.query(StudySession).filter(StudySession.user_id == u_id).order_by(StudySession.start_time.desc()).all()
 

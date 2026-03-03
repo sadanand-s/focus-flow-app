@@ -5,7 +5,7 @@ Run with: uvicorn api_sidecar:app --host 0.0.0.0 --port 8000
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import json
 
@@ -77,7 +77,7 @@ class LogResponse(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/api/sessions", response_model=list[SessionResponse])

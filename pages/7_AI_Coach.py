@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from database import SessionLocal, StudySession, User
+from database import get_db, StudySession
 from utils import apply_theme, require_auth, render_page_header, t, get_current_user_id
 from gemini_utils import generate_coach_response
 import io
-import fpdf
+from fpdf import FPDF
+import plotly.express as px
 
 # ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
@@ -22,7 +23,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ─── Database & Context ──────────────────────────────────────────────────────
-db = SessionLocal()
+db = next(get_db(st.session_state.get("db_url")))
 u_id = get_current_user_id(db)
 thirty_days_ago = datetime.now() - timedelta(days=30)
 sessions = db.query(StudySession).filter(
@@ -54,9 +55,13 @@ with st.sidebar:
         avg_focus = sum(s.avg_engagement for s in sessions) / len(sessions)
         st.metric("30-Day Avg Focus", f"{avg_focus:.0f}%")
         
-        # Simple mini bar chart of engagement
+        # Replacing st.bar_chart with Plotly to avoid Python 3.14 Altair crash
         progress_df = pd.DataFrame([s.avg_engagement for s in sessions], columns=["Focus %"])
-        st.bar_chart(progress_df, height=150)
+        fig = px.bar(x=range(len(progress_df)), y=progress_df["Focus %"], 
+                     labels={'x': 'Sessions', 'y': 'Focus %'}, height=200)
+        fig.update_layout(template="plotly_dark", margin=dict(l=0,r=0,t=0,b=0),
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     else:
         st.info("No focus data for the last 30 days yet.")
 
@@ -103,7 +108,7 @@ if user_input:
 if st.session_state.chat_history:
     st.divider()
     if st.button("📄 Export Chat as PDF", use_container_width=True):
-        pdf = fpdf.FPDF()
+        pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(40, 10, f"{app_name} AI Coach - Chat Report")
@@ -120,7 +125,7 @@ if st.session_state.chat_history:
             pdf.multi_cell(0, 10, msg["text"])
             pdf.ln(5)
             
-        pdf_bytes = pdf.output(dest='S').encode('latin-1', 'replace')
+        pdf_bytes = pdf.output()
         st.download_button("📥 Download Report", pdf_bytes, "ai_coach_report.pdf", "application/pdf")
 
 db.close()

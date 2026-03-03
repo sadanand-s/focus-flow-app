@@ -320,17 +320,26 @@ def _red_border_html() -> str:
     </style>
     <script>
         (function() {
-            var target = window.parent.document.querySelector('[data-testid="stVerticalBlock"]');
-            if (!target) target = window.parent.document.querySelector('section.main');
-            if (target) {
-                target.style.border = '3px solid #FF5252';
-                target.style.borderRadius = '12px';
-                target.style.animation = 'pulse-red-border 1.2s ease-in-out 4';
-                setTimeout(function() {
-                    target.style.border = '';
-                    target.style.borderRadius = '';
-                    target.style.animation = '';
-                }, 7000);
+            try {
+                var target = window.parent.document.querySelector('[data-testid="stVerticalBlock"]');
+                if (!target) target = window.parent.document.querySelector('section.main');
+                if (target) {
+                    target.style.border = '3px solid #FF5252';
+                    target.style.borderRadius = '12px';
+                    target.style.animation = 'pulse-red-border 1.2s ease-in-out 4';
+                    setTimeout(function() {
+                        target.style.border = '';
+                        target.style.borderRadius = '';
+                        target.style.animation = '';
+                    }, 7000);
+                }
+            } catch (e) {
+                console.warn("Troll red border failed due to browser security:", e);
+                // Fallback: show a red flash overlay inside the current frame
+                var flash = document.createElement('div');
+                flash.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;border:10px solid #FF5252;pointer-events:none;z-index:9999;animation:pulse-red-border 1.2s ease-in-out 4;";
+                document.body.appendChild(flash);
+                setTimeout(function(){ flash.remove(); }, 7000);
             }
         })();
     </script>

@@ -23,9 +23,14 @@ MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_land
 def _ensure_model():
     """Download the FaceLandmarker model if not present."""
     if not os.path.exists(MODEL_PATH):
-        print(f"Downloading FaceLandmarker model to {MODEL_PATH}...")
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        print("Download complete.")
+        try:
+            print(f"Downloading FaceLandmarker model to {MODEL_PATH}...")
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH, timeout=30)
+            print("Download complete.")
+        except Exception as e:
+            print(f"Model download failed: {e}")
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 
 
 # ─── Landmark Indices (same numbering as legacy FaceMesh) ─────────────────────
@@ -95,18 +100,25 @@ def calculate_mar(landmarks, img_w, img_h):
 
 
 def get_head_pose(landmarks, img_w, img_h):
-    """Estimate head pose (pitch, yaw, roll) using solvePnP."""
-    face_3d = []
+    """Estimate head pose (pitch, yaw, roll) using solvePnP and canonical 3D model."""
+    # Standard 3D model points for generic face (nose, chin, eyes, mouth)
+    model_points = np.array([
+        (0.0, 0.0, 0.0),             # Nose tip
+        (0.0, -330.0, -65.0),        # Chin
+        (-225.0, 170.0, -135.0),     # Left eye left corner
+        (225.0, 170.0, -135.0),      # Right eye right corner
+        (-150.0, -150.0, -125.0),    # Left Mouth corner
+        (150.0, -150.0, -125.0)      # Right mouth corner
+    ], dtype=np.float64)
+
     face_2d = []
     for idx in HEAD_POSE_POINTS:
         lm = landmarks[idx]
-        x, y = int(lm.x * img_w), int(lm.y * img_h)
-        face_2d.append([x, y])
-        face_3d.append([x, y, lm.z])
-
+        face_2d.append([lm.x * img_w, lm.y * img_h])
+    
     face_2d = np.array(face_2d, dtype=np.float64)
-    face_3d = np.array(face_3d, dtype=np.float64)
 
+    # Approximate focal length
     focal_length = img_w
     cam_matrix = np.array([
         [focal_length, 0, img_w / 2],
@@ -115,16 +127,18 @@ def get_head_pose(landmarks, img_w, img_h):
     ], dtype=np.float64)
     dist_matrix = np.zeros((4, 1), dtype=np.float64)
 
-    success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
+    success, rot_vec, trans_vec = cv2.solvePnP(model_points, face_2d, cam_matrix, dist_matrix)
     if not success:
         return 0.0, 0.0, 0.0
 
     rmat, _ = cv2.Rodrigues(rot_vec)
     angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
 
-    pitch = angles[0] * 360
-    yaw = angles[1] * 360
-    roll = angles[2] * 360
+    # In RQDecomp3x3, angles are usually degrees.
+    # We calibrate to return pitch, yaw, roll where 0 is looking straight.
+    pitch = angles[0]
+    yaw = angles[1] 
+    roll = angles[2]
     return pitch, yaw, roll
 
 
@@ -200,14 +214,21 @@ class CVProcessor:
 
     def __init__(self):
         _ensure_model()
-        options = FaceLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=MODEL_PATH),
-            running_mode=RunningMode.IMAGE,
-            output_face_blendshapes=False,
-            output_facial_transformation_matrixes=False,
-            num_faces=1,
-        )
-        self.landmarker = FaceLandmarker.create_from_options(options)
+        try:
+            options = FaceLandmarkerOptions(
+                base_options=BaseOptions(model_asset_path=MODEL_PATH),
+                running_mode=RunningMode.IMAGE,
+                output_face_blendshapes=False,
+                output_facial_transformation_matrixes=False,
+                num_faces=1,
+            )
+            self.landmarker = FaceLandmarker.create_from_options(options)
+            self.model_loaded = True
+        except Exception as e:
+            print(f"Failed to load FaceLandmarker: {e}")
+            self.landmarker = None
+            self.model_loaded = False
+        
         self.prev_gray = None
         self.drowsy_frames = 0
         self.no_face_frames = 0
@@ -224,8 +245,29 @@ class CVProcessor:
         Process a single frame and return engagement metrics.
         Returns dict with all metrics and annotated frame.
         """
+        try:
+            return self._process_frame_logic(frame)
+        except Exception as e:
+            # Fallback for stability on unstable Python versions
+            return {
+                "has_face": False, "ear": 0.0, "pitch": 0.0, "yaw": 0.0,
+                "roll": 0.0, "gaze_score": 0.0, "presence_score": 0.0,
+                "is_spoof": False, "is_distracted": True, "engagement_score": 0.0,
+                "annotated_frame": frame.copy(), "error": str(e)
+            }
+
+    def _process_frame_logic(self, frame):
         self._inner_frame_count += 1
         img_h, img_w = frame.shape[:2]
+        
+        # Check if model is loaded
+        if not self.model_loaded or self.landmarker is None:
+            return {
+                "has_face": False, "ear": 0.0, "pitch": 0.0, "yaw": 0.0,
+                "roll": 0.0, "gaze_score": 0.0, "presence_score": 0.0,
+                "is_spoof": False, "is_distracted": True, "engagement_score": 0.0,
+                "annotated_frame": frame.copy(), "error": "Model not loaded"
+            }
         
         # Optimization 1: Resize for much faster processing
         # 480p is the sweet spot for MediaPipe accuracy vs speed

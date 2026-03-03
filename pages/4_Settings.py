@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import os
 import base64
-from database import get_engine, SessionLocal, User, UserSetting, migrate_db
+from database import get_db, User, UserSetting, migrate_db
 from utils import apply_theme, require_auth, render_page_header, t
 import yaml
 
@@ -17,10 +17,15 @@ apply_theme()
 render_page_header(f"⚙️ {t('settings')}", "Personalize your focus environment.")
 
 # ─── Load Settings from DB ──────────────────────────────────────────────────
-db = SessionLocal()
-username = st.session_state.username
+db = next(get_db(st.session_state.get("db_url")))
+username = st.session_state.get("username", "anonymous")
 user = db.query(User).filter(User.username == username).first()
-if user and not user.settings:
+if not user:
+    user = User(username=username, email=f"{username}@focusflow.app")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+if not user.settings:
     user.settings = UserSetting(user_id=user.id)
     db.commit()
 settings_obj = user.settings
@@ -28,6 +33,8 @@ settings_obj = user.settings
 # Sync session state with DB if needed
 if "settings_config" not in st.session_state:
     st.session_state.settings_config = settings_obj.extra_config or {}
+elif settings_obj.extra_config:
+    st.session_state.settings_config = {**st.session_state.settings_config, **settings_obj.extra_config}
 
 # ─── Layout Tabs ────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -143,6 +150,8 @@ docker-compose up -d
                 if success:
                     st.success(msg)
                     st.session_state.db_url = new_db_url
+                    os.environ["DATABASE_URL"] = new_db_url
+                    st.session_state["_settings_loaded"] = False
                 else:
                     st.error(msg)
 
@@ -175,6 +184,7 @@ if st.button("💾 Save All Personalized Settings", use_container_width=True):
     settings_obj.troll_mode = st.session_state.troll_mode
     settings_obj.nudge_only = st.session_state.nudge_only
     db.commit()
+    st.session_state["_settings_loaded"] = True
     
     st.success("✅ Settings saved successfully! Rerunning app...")
     time.sleep(1)

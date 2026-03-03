@@ -8,8 +8,9 @@ import streamlit.components.v1 as components
 import yaml
 from yaml.loader import SafeLoader
 import os
+from datetime import timezone
 
-from utils import apply_theme, init_session_defaults, render_page_header
+from utils import apply_theme, init_session_defaults, render_page_header, require_auth
 from database import init_db
 
 # ─── Page Config ──────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ authenticator = stauth.Authenticate(
     config['cookie']['name'],
     config['cookie']['key'],
     config['cookie']['expiry_days'],
+    preauthorized=config.get('pre-authorized', {}).get('emails', [])
 )
 
 # ─── Login Flow ──────────────────────────────────────────────────────────────
@@ -54,7 +56,8 @@ if not st.session_state.get('authentication_status'):
     # Read caught state from query params
     if st.query_params.get('caught') == 'true':
         st.session_state['troll_caught'] = True
-        st.query_params.clear() # Clean up URL
+        # Safer way to clear query params in recent Streamlit
+        st.query_params.pop('caught', None)
 
     troll_enabled = st.session_state.get('troll_mode', True)
     troll_caught = st.session_state.get('troll_caught', False)
@@ -154,7 +157,8 @@ if not st.session_state.get('authentication_status'):
         """, unsafe_allow_html=True)
 
         try:
-            authenticator.login()
+            # In version 0.4.1+, location is mandatory
+            authenticator.login(location='main')
         except Exception as e:
             st.error(f"Login error: {e}")
 
@@ -182,6 +186,8 @@ if not st.session_state.get('authentication_status'):
 # ─── Authenticated Home ──────────────────────────────────────────────────────
 
 if st.session_state.get('authentication_status'):
+    require_auth()
+    apply_theme(st.session_state.get("theme", "Dark"))
     # Sidebar
     with st.sidebar:
         app_name = st.session_state.get("settings_config", {}).get("app_name", st.session_state.get("app_name", "Focus Flow"))

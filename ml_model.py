@@ -6,7 +6,7 @@ import numpy as np
 import pickle
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
@@ -67,7 +67,7 @@ class EngagementModel:
                 accuracy = float(self.model.score(X, y))
 
             self.last_accuracy = round(accuracy, 4)
-            self.last_trained = datetime.utcnow().isoformat()
+            self.last_trained = datetime.now(timezone.utc).isoformat()
 
             self.training_history.append({
                 "timestamp": self.last_trained,

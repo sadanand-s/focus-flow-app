@@ -3,7 +3,7 @@ database.py — SQLAlchemy database layer with configurable engine.
 Supports SQLite (default) and PostgreSQL/Supabase.
 """
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import (create_engine, Column, Integer, String, Float,
                         DateTime, Boolean, ForeignKey, Text, JSON, inspect, text)
@@ -20,7 +20,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, index=True, nullable=False)
     email = Column(String(200), unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSetting", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -34,7 +34,7 @@ class StudySession(Base):
     name = Column(String(200), default="Study Session")
     tag = Column(String(100), default="General")
     status = Column(String(20), default="active")  # active | completed
-    start_time = Column(DateTime, default=datetime.utcnow)
+    start_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     end_time = Column(DateTime, nullable=True)
     duration_seconds = Column(Integer, default=0)
     avg_engagement = Column(Float, default=0.0)
@@ -52,7 +52,7 @@ class EngagementLog(Base):
     __tablename__ = "engagement_logs"
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     ear_value = Column(Float, default=0.0)
     head_pitch = Column(Float, default=0.0)
     head_yaw = Column(Float, default=0.0)
@@ -82,7 +82,7 @@ class UserSetting(Base):
     
     # Extra settings (JSON blob for accent_color, app_name, etc.)
     profile_avatar = Column(Text, nullable=True)  # Base64
-    extra_config = Column(JSON, default={})
+    extra_config = Column(JSON, default=dict)
 
     user = relationship("User", back_populates="settings")
 
@@ -94,7 +94,7 @@ class TrainingData(Base):
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True)
     feature_vector = Column(Text)  # JSON array of [ear, pitch, yaw, roll, gaze, expression]
     label = Column(Integer)  # 0 = distracted, 1 = focused
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="training_samples")
 

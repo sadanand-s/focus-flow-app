@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from database import SessionLocal, StudySession, User
+from database import get_db, StudySession
 from utils import apply_theme, require_auth, render_page_header, t, format_duration, render_metric_card, get_current_user_id
 from exports import generate_pdf, generate_csv_from_db
 from gemini_utils import generate_session_summary
@@ -17,7 +17,7 @@ apply_theme()
 render_page_header(f"📚 {t('sessions')}", "Review and manage your study history.")
 
 # ─── Database Access ────────────────────────────────────────────────────────
-db = SessionLocal()
+db = next(get_db(st.session_state.get("db_url")))
 u_id = get_current_user_id(db)
 sessions = db.query(StudySession).filter(StudySession.user_id == u_id).order_by(StudySession.start_time.desc()).all()
 
