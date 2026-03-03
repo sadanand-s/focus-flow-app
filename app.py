@@ -56,7 +56,6 @@ if not st.session_state.get('authentication_status'):
     # Read caught state from query params
     if st.query_params.get('caught') == 'true':
         st.session_state['troll_caught'] = True
-        # Safer way to clear query params in recent Streamlit
         st.query_params.pop('caught', None)
 
     troll_enabled = st.session_state.get('troll_mode', True)
@@ -64,7 +63,7 @@ if not st.session_state.get('authentication_status'):
 
     if troll_enabled and not troll_caught:
         # ─── Troll Login Screen ───────────────────────────────────
-        st.markdown("""
+        st.markdown(\"\"\"
         <div style="text-align: center; padding: 2rem 0 0.5rem 0;">
             <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">
                 <span style="background: linear-gradient(135deg, #6C63FF, #00D2FF);
@@ -78,29 +77,32 @@ if not st.session_state.get('authentication_status'):
                 👆 Catch the bouncing button to unlock login!
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        \"\"\", unsafe_allow_html=True)
 
         # Inject postMessage listener so the iframe can signal when caught
-        st.markdown("""
+        st.markdown(\"\"\"
         <script>
         window.addEventListener('message', function(e) {
             if (e.data && e.data.type === 'troll_caught') {
-                // Set a hidden flag that we can pick up via URL or sessionStorage
                 sessionStorage.setItem('st_troll_caught', 'true');
-                // Force page reload to show login
-                window.location.reload();
+                const url = new URL(window.location.href);
+                url.searchParams.set('caught', 'true');
+                window.location.assign(url.toString());
             }
         });
-        // If sessionStorage already has the flag, auto-skip BEFORE iframe renders
-        if (sessionStorage.getItem('st_troll_caught') === 'true' ||
-            sessionStorage.getItem('troll_done') === 'true') {
-            sessionStorage.setItem('st_troll_caught', 'true');
-            const url = new URL(window.location.href);
-            url.searchParams.set('caught', 'true');
-            window.location.href = url.toString();
-        }
+        // Auto-skip logic
+        (function() {
+            if (sessionStorage.getItem('st_troll_caught') === 'true' || 
+                sessionStorage.getItem('troll_done') === 'true') {
+                const url = new URL(window.location.href);
+                if (!url.searchParams.has('caught')) {
+                    url.searchParams.set('caught', 'true');
+                    window.location.assign(url.toString());
+                }
+            }
+        })();
         </script>
-        """, unsafe_allow_html=True)
+        \"\"\", unsafe_allow_html=True)
 
         # Load troll button HTML
         troll_path = os.path.join(os.path.dirname(__file__), "ui_components", "troll_login.html")
@@ -122,7 +124,7 @@ if not st.session_state.get('authentication_status'):
 
     else:
         # ─── Standard Login Form ──────────────────────────────────
-        st.markdown("""
+        st.markdown(\"\"\"
         <div style="text-align: center; padding: 2rem 0 1rem 0;">
             <div id="app-logo" style="cursor: pointer; display: inline-block;"
                  onclick="handleLogoCick()">
@@ -154,7 +156,7 @@ if not st.session_state.get('authentication_status'):
             }
         }
         </script>
-        """, unsafe_allow_html=True)
+        \"\"\", unsafe_allow_html=True)
 
         try:
             # In version 0.4.1+, location is mandatory
@@ -193,7 +195,7 @@ if st.session_state.get('authentication_status'):
         app_name = st.session_state.get("settings_config", {}).get("app_name", st.session_state.get("app_name", "Focus Flow"))
         session_active = bool(st.session_state.get('current_session_id'))
 
-        st.markdown(f"""
+        st.markdown(f\"\"\"
         <div style="text-align: center; padding: 1rem 0;">
             <div style="font-size: 2.5rem;">🧠</div>
             <h2 style="background: linear-gradient(135deg, #6C63FF, #00D2FF);
@@ -203,13 +205,13 @@ if st.session_state.get('authentication_status'):
                 Welcome, <b>{st.session_state.get('name', 'User')}</b>!
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        \"\"\", unsafe_allow_html=True)
 
         st.divider()
 
         # Live session status dot
         if session_active:
-            st.markdown("""
+            st.markdown(\"\"\"
             <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
                 <span style="display:inline-block;width:10px;height:10px;
                     border-radius:50%;background:#00E676;
@@ -223,18 +225,18 @@ if st.session_state.get('authentication_status'):
                 50%{box-shadow:0 0 14px #00E676;}
             }
             </style>
-            """, unsafe_allow_html=True)
+            \"\"\", unsafe_allow_html=True)
         else:
-            st.markdown("""
+            st.markdown(\"\"\"
             <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
                 <span style="display:inline-block;width:10px;height:10px;
                     border-radius:50%;background:#555;"></span>
                 <span style="color:#9E9E9E;font-size:0.85rem;">No active session</span>
             </div>
-            """, unsafe_allow_html=True)
+            \"\"\", unsafe_allow_html=True)
 
         st.divider()
-        authenticator.logout("� Logout", "sidebar")
+        authenticator.logout("🚪 Logout", "sidebar")
 
     # Main content — Home page
     render_page_header("🏠 Welcome to Focus Flow", "Your AI-powered study engagement companion")
@@ -249,13 +251,13 @@ if st.session_state.get('authentication_status'):
     ]
     for col, (icon, val, label, tip) in zip([col1, col2, col3, col4], cards):
         with col:
-            st.markdown(f"""
+            st.markdown(f\"\"\"
             <div class="metric-card" title="{tip}">
                 <div style="font-size: 1.5rem;">{icon}</div>
                 <div class="metric-value">{val}</div>
                 <div class="metric-label">{label}</div>
             </div>
-            """, unsafe_allow_html=True)
+            \"\"\", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -264,20 +266,20 @@ if st.session_state.get('authentication_status'):
 
     with col_left:
         st.subheader("🚀 Quick Start Guide")
-        st.markdown("""
+        st.markdown(\"\"\"
         1. **Go to Dashboard** → Start a new study session with your webcam
         2. **Study!** → The system tracks your engagement in real-time
         3. **View Analytics** → Review your session performance and trends
         4. **Export Reports** → Download PDF/CSV reports of your sessions
         5. **Configure Settings** → Customize themes, nudges, and integrations
-        """)
+        \"\"\" )
 
         if st.session_state.get('current_session_id'):
             st.info("📹 You have an active session! Head to the **Dashboard** to continue.")
 
     with col_right:
         st.subheader("📌 Features")
-        st.markdown("""
+        st.markdown(\"\"\"
         - 👁️ **Eye Tracking** — EAR-based drowsiness detection
         - 🖥️ **Head Pose** — Gaze direction estimation
         - 🤡 **Troll Mode** — Fun nudges when distracted
@@ -285,7 +287,7 @@ if st.session_state.get('authentication_status'):
         - 📄 **Session Reports** — PDF & CSV exports
         - 🔒 **Anti-Spoofing** — Photo detection
         - 📈 **ML Training** — Personalized engagement model
-        """)
+        \"\"\" )
 
     # Save config if changed
     try:
