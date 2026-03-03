@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="UTF-8">
   <style>
     * {
       margin: 0;
@@ -18,180 +19,169 @@
       font-family: 'Segoe UI', 'Inter', sans-serif;
     }
 
-    #trollBtn {
+    #troll-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #0F1117;
+      z-index: 9999;
+      overflow: hidden;
+    }
+
+    #hint-text {
+      position: fixed;
+      top: 30px;
+      width: 100%;
+      text-align: center;
+      color: #9E9E9E;
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+      pointer-events: none;
+      z-index: 10000;
+    }
+
+    #bouncy-btn {
       position: absolute;
       padding: 16px 36px;
       font-size: 18px;
       font-weight: 800;
-      background: linear-gradient(135deg, #FF4B4B, #FF6B6B);
-      color: white;
+      background: linear-gradient(135deg, #6C63FF, #00D2FF);
       border: none;
-      border-radius: 14px;
+      border-radius: 50px;
+      color: white;
       cursor: pointer;
-      box-shadow: 0 6px 24px rgba(255, 75, 75, 0.4);
-      letter-spacing: 2px;
-      z-index: 10;
-      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 0 30px rgba(108, 99, 255, 0.6);
+      transition: transform 0.1s;
       user-select: none;
+      z-index: 10;
+      left: 50%;
+      top: 50%;
     }
 
-    #trollBtn:hover {
+    #bouncy-btn:hover {
       transform: scale(1.08);
-      box-shadow: 0 8px 32px rgba(255, 75, 75, 0.6);
+    }
+
+    #troll-overlay.hiding {
+      animation: overlayFade 0.6s ease forwards;
+    }
+
+    @keyframes overlayFade {
+      to {
+        opacity: 0;
+        pointer-events: none;
+      }
     }
 
     .particle {
       position: absolute;
       border-radius: 50%;
       pointer-events: none;
-      animation: explode 0.8s ease-out forwards;
-    }
-
-    @keyframes explode {
-      0% {
-        transform: scale(1);
-        opacity: 1;
-      }
-
-      100% {
-        transform: scale(0);
-        opacity: 0;
-      }
-    }
-
-    @keyframes popScale {
-      0% {
-        transform: scale(1);
-      }
-
-      50% {
-        transform: scale(1.6);
-      }
-
-      100% {
-        transform: scale(0);
-        opacity: 0;
-      }
-    }
-
-    #trail {
-      position: absolute;
-      pointer-events: none;
-      z-index: 5;
     }
   </style>
 </head>
 
 <body>
-  <div id="trail"></div>
-  <button id="trollBtn">✨ CLICK ME ✨</button>
+  <div id="troll-overlay">
+    <div id="hint-text">&#127919; Catch the button to login!</div>
+    <button id="bouncy-btn" onclick="trollClicked()">&#127919; CLICK ME</button>
+  </div>
 
   <script>
-    (function () {
-      const btn = document.getElementById('trollBtn');
-      const trail = document.getElementById('trail');
-      let x, y, dx, dy, btnW, btnH, caught = false;
+    // Check if already caught this session
+    if (sessionStorage.getItem('troll_done') === 'true') {
+      document.getElementById('troll-overlay').remove();
+      // Signal parent to show login
+      window.parent.postMessage({ type: 'troll_caught' }, '*');
+    }
 
-      function init() {
-        const rect = btn.getBoundingClientRect();
-        btnW = rect.width;
-        btnH = rect.height;
-        x = (window.innerWidth - btnW) / 2;
-        y = (window.innerHeight - btnH) / 2;
-        dx = 3 + Math.random() * 2;
-        dy = 2.5 + Math.random() * 2;
-        btn.style.left = x + 'px';
-        btn.style.top = y + 'px';
-        requestAnimationFrame(animate);
+    var x = window.innerWidth / 2;
+    var y = window.innerHeight / 2;
+    var vx = 3.2, vy = 2.6;
+    var btn = document.getElementById('bouncy-btn');
+    var animating = true;
+
+    // Randomize initial direction
+    vx = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 2);
+    vy = (Math.random() > 0.5 ? 1 : -1) * (2.5 + Math.random() * 2);
+
+    function bounce() {
+      if (!animating || !btn) return;
+      var W = window.innerWidth;
+      var H = window.innerHeight;
+      var bw = btn.offsetWidth || 160;
+      var bh = btn.offsetHeight || 56;
+
+      x += vx;
+      y += vy;
+
+      if (x <= 0) { x = 0; vx = Math.abs(vx); }
+      if (x >= W - bw) { x = W - bw; vx = -Math.abs(vx); }
+      if (y <= 0) { y = 0; vy = Math.abs(vy); }
+      if (y >= H - bh) { y = H - bh; vy = -Math.abs(vy); }
+
+      btn.style.left = x + 'px';
+      btn.style.top = y + 'px';
+      requestAnimationFrame(bounce);
+    }
+
+    // Small delay so button renders with size first
+    setTimeout(function () {
+      var bw = btn.offsetWidth || 160;
+      var bh = btn.offsetHeight || 56;
+      x = (window.innerWidth - bw) / 2;
+      y = (window.innerHeight - bh) / 2;
+      bounce();
+    }, 100);
+
+    function explodeParticles(cx, cy) {
+      var colors = ['#6C63FF', '#00D2FF', '#00E676', '#FFD600', '#FF5252'];
+      for (var i = 0; i < 20; i++) {
+        var p = document.createElement('div');
+        p.className = 'particle';
+        var size = 5 + Math.random() * 12;
+        var angle = (Math.PI * 2 * i) / 20;
+        var dist = 40 + Math.random() * 80;
+        var tx = cx + Math.cos(angle) * dist;
+        var ty = cy + Math.sin(angle) * dist;
+        p.style.cssText = 'position:absolute;left:' + cx + 'px;top:' + cy + 'px;width:' + size + 'px;height:' + size + 'px;background:' + colors[i % colors.length] + ';border-radius:50%;transition:left 0.6s ease-out,top 0.6s ease-out,opacity 0.6s;';
+        document.body.appendChild(p);
+        requestAnimationFrame(function (el, etx, ety) {
+          return function () {
+            el.style.left = etx + 'px';
+            el.style.top = ety + 'px';
+            el.style.opacity = '0';
+          };
+        }(p, tx, ty));
+        setTimeout(function (el) { return function () { if (el.parentNode) el.remove(); }; }(p), 800);
       }
+    }
 
-      function animate() {
-        if (caught) return;
-        x += dx;
-        y += dy;
+    function trollClicked() {
+      animating = false;
+      var bx = x + (btn.offsetWidth || 160) / 2;
+      var by = y + (btn.offsetHeight || 56) / 2;
+      explodeParticles(bx, by);
 
-        // Bounce off walls
-        if (x + btnW > window.innerWidth || x < 0) {
-          dx = -dx;
-          x = Math.max(0, Math.min(x, window.innerWidth - btnW));
-        }
-        if (y + btnH > window.innerHeight || y < 0) {
-          dy = -dy;
-          y = Math.max(0, Math.min(y, window.innerHeight - btnH));
-        }
+      btn.textContent = '✅ Nice catch!';
+      btn.style.transform = 'scale(1.3)';
+      btn.style.background = 'linear-gradient(135deg, #00E676, #00D2FF)';
 
-        btn.style.left = x + 'px';
-        btn.style.top = y + 'px';
-
-        // Motion trail
-        if (Math.random() < 0.3) {
-          const dot = document.createElement('div');
-          dot.style.cssText = `position:absolute;left:${x + btnW / 2}px;top:${y + btnH / 2}px;
-        width:6px;height:6px;border-radius:50%;background:rgba(255,75,75,0.3);
-        pointer-events:none;transition:opacity 0.5s;`;
-          trail.appendChild(dot);
-          setTimeout(() => { dot.style.opacity = '0'; }, 100);
-          setTimeout(() => { if (dot.parentNode) dot.remove(); }, 600);
-        }
-
-        requestAnimationFrame(animate);
-      }
-
-      btn.addEventListener('click', function (e) {
-        if (caught) return;
-        caught = true;
-
-        // Particle explosion
-        const colors = ['#FF4B4B', '#FFD700', '#00D26A', '#4BAFFF', '#FF6BFF'];
-        const cx = x + btnW / 2;
-        const cy = y + btnH / 2;
-        for (let i = 0; i < 20; i++) {
-          const p = document.createElement('div');
-          p.className = 'particle';
-          const size = 5 + Math.random() * 12;
-          const angle = (Math.PI * 2 * i) / 20;
-          const dist = 40 + Math.random() * 80;
-          const tx = cx + Math.cos(angle) * dist;
-          const ty = cy + Math.sin(angle) * dist;
-          p.style.cssText = `left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;
-        background:${colors[i % colors.length]};
-        transition: left 0.6s ease-out, top 0.6s ease-out;`;
-          document.body.appendChild(p);
-          requestAnimationFrame(() => {
-            p.style.left = tx + 'px';
-            p.style.top = ty + 'px';
-          });
-          setTimeout(() => p.remove(), 800);
-        }
-
-        // Pop effect on button
-        btn.innerHTML = '🎉 P O P ! 🎉';
-        btn.style.background = 'linear-gradient(135deg, #00D26A, #4BAFFF)';
-        btn.style.animation = 'popScale 0.6s ease-out forwards';
-
-        // Signal to Streamlit parent
-        setTimeout(() => {
-          try {
-            // Method 1: postMessage (most reliable in iframes)
-            window.parent.postMessage({ type: 'troll_caught', caught: true }, '*');
-          } catch (e) { }
-          try {
-            // Method 2: Query params
-            const params = new URLSearchParams(window.parent.location.search);
-            params.set('caught', 'true');
-            window.parent.location.search = params.toString();
-          } catch (e) {
-            // Method 3: Visual signal for manual skip
-            btn.innerHTML = '✅ Done! Click "I Caught It!" below';
-            btn.style.animation = 'none';
-            btn.style.transform = 'scale(1)';
-            btn.style.opacity = '1';
-          }
-        }, 700);
-      });
-
-      setTimeout(init, 50);
-    })();
+      setTimeout(function () {
+        var overlay = document.getElementById('troll-overlay');
+        if (overlay) overlay.classList.add('hiding');
+        setTimeout(function () {
+          var overlay2 = document.getElementById('troll-overlay');
+          if (overlay2) overlay2.remove();
+          // Save to sessionStorage so it never shows again this session
+          sessionStorage.setItem('troll_done', 'true');
+          // Notify parent Streamlit frame
+          window.parent.postMessage({ type: 'troll_caught' }, '*');
+        }, 600);
+      }, 500);
+    }
   </script>
 </body>
 

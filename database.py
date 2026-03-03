@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import (create_engine, Column, Integer, String, Float,
-                        DateTime, Boolean, ForeignKey, Text, JSON, inspect)
+                        DateTime, Boolean, ForeignKey, Text, JSON, inspect, text)
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 
@@ -80,9 +80,9 @@ class UserSetting(Base):
     export_preference = Column(String(10), default="Both")
     bot_training_enabled = Column(Boolean, default=False)
     
-    # Premium Specs
-    profile_avatar = Column(Text, nullable=True) # Base64 blob
-    premium_config = Column(JSON, default={}) # Holds accent_color, app_name, etc.
+    # Extra settings (JSON blob for accent_color, app_name, etc.)
+    profile_avatar = Column(Text, nullable=True)  # Base64
+    extra_config = Column(JSON, default={})
 
     user = relationship("User", back_populates="settings")
 
@@ -133,10 +133,25 @@ SessionLocal = get_session_factory()
 
 
 def init_db(engine=None):
-    """Create all tables."""
+    """Create all tables and perform minor migrations."""
     if engine is None:
         engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    
+    # Minor migrations for SQLite
+    try:
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("settings")]
+        
+        with engine.connect() as conn:
+            if "profile_avatar" not in columns:
+                conn.execute(text("ALTER TABLE settings ADD COLUMN profile_avatar TEXT"))
+            if "extra_config" not in columns:
+                conn.execute(text("ALTER TABLE settings ADD COLUMN extra_config JSON"))
+            conn.commit()
+    except Exception as e:
+        # If it fails (e.g. column already exists or table doesn't exist), just ignore
+        pass
 
 
 def migrate_db(new_url: str) -> tuple:

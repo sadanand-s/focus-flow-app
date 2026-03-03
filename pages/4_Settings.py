@@ -10,7 +10,7 @@ import yaml
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
-app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - Settings", page_icon="⚙️", layout="wide")
 apply_theme()
 
@@ -27,7 +27,7 @@ settings_obj = user.settings
 
 # Sync session state with DB if needed
 if "settings_config" not in st.session_state:
-    st.session_state.settings_config = settings_obj.premium_config or {}
+    st.session_state.settings_config = settings_obj.extra_config or {}
 
 # ─── Layout Tabs ────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -171,7 +171,7 @@ if st.button("💾 Save All Personalized Settings", use_container_width=True):
     })
     
     # Save to DB
-    settings_obj.premium_config = st.session_state.settings_config
+    settings_obj.extra_config = st.session_state.settings_config
     settings_obj.troll_mode = st.session_state.troll_mode
     settings_obj.nudge_only = st.session_state.nudge_only
     db.commit()

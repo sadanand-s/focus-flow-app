@@ -6,7 +6,7 @@ import json
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
-app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - Integrations", page_icon="🔗", layout="wide")
 apply_theme()
 

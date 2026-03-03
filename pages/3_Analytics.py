@@ -15,7 +15,7 @@ from database import SessionLocal, StudySession, EngagementLog
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
-app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - Analytics", page_icon="🧠", layout="wide")
 apply_theme()
 
@@ -65,9 +65,9 @@ with tab_over:
 
     # Focus Forecast Card
     st.markdown("""
-        <div class="glass-panel" style="border-left: 5px solid #FFD600;">
-            <h3>🔮 Focus Forecast</h3>
-            <p>Based on your last 10 sessions, your <b>Peak Focus Window</b> is between <b>10:00 AM - 12:30 PM</b>. 
+        <div class="glass-panel" style="border-left: 5px solid #FFD600; padding:1.2rem;">
+            <h3 style="margin:0 0 0.5rem 0;">🔮 Focus Forecast</h3>
+            <p style="margin:0; opacity:0.9;">Based on your last 10 sessions, your <b>Peak Focus Window</b> is between <b>10:00 AM - 12:30 PM</b>. 
             Engagement tends to drop by 15% after 4:00 PM. Plan your hardest tasks for the morning!</p>
         </div>
     """, unsafe_allow_html=True)
@@ -111,9 +111,9 @@ with tab_trends:
     st.plotly_chart(fig_hm, use_container_width=True)
     
     st.markdown("""
-        <div class="glass-panel">
-            <h4>📈 Attention Trends</h4>
-            <p>Your average focus has <b>increased by 8%</b> over the last week. Keep hitting those targets! 🎯</p>
+        <div class="glass-panel" style="padding:1.2rem;">
+            <h4 style="margin:0 0 0.5rem 0;">📈 Attention Trends</h4>
+            <p style="margin:0; opacity:0.9;">Your average focus has <b>increased by 8%</b> over the last week. Keep hitting those targets! 🎯</p>
         </div>
     """, unsafe_allow_html=True)
 

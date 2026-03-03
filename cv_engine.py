@@ -216,14 +216,33 @@ class CVProcessor:
         self.variance_buffer = deque(maxlen=150)
         self.prev_landmarks = None
         self.micro_expression_buffer = deque(maxlen=30)
+        self._inner_frame_count = 0
+        self._last_output = {}
 
     def process_frame(self, frame):
         """
         Process a single frame and return engagement metrics.
         Returns dict with all metrics and annotated frame.
         """
+        self._inner_frame_count += 1
         img_h, img_w = frame.shape[:2]
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Optimization 1: Resize for much faster processing
+        # 480p is the sweet spot for MediaPipe accuracy vs speed
+        target_h = 480
+        scale = target_h / img_h
+        proc_frame = cv2.resize(frame, (int(img_w * scale), target_h), interpolation=cv2.INTER_AREA)
+        proc_h, proc_w = proc_frame.shape[:2]
+
+        # Optimization 2: Frame skipping (process logic every 2nd frame)
+        if self._inner_frame_count % 2 == 0 and self._last_output:
+            out = self._last_output.copy()
+            out["annotated_frame"] = frame.copy() 
+            # Re-draw minimal UI on current frame if possible, 
+            # but for now just return the previous logic with the current frame
+            return out
+
+        rgb_frame = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2RGB)
 
         # Convert to MediaPipe Image
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
@@ -257,16 +276,18 @@ class CVProcessor:
                 output["is_spoof"] = True
         self.prev_gray = gray
 
-        # ─── Face Processing ──────────────────────────────────────────
         if results.face_landmarks:
             self.no_face_frames = 0
             output["has_face"] = True
             output["presence_score"] = 1.0
             landmarks = results.face_landmarks[0]
 
+            # Use processed dimensions for calculations
+            calc_w, calc_h = proc_w, proc_h
+
             # EAR
-            left_ear = calculate_ear(LEFT_EYE, landmarks, img_w, img_h)
-            right_ear = calculate_ear(RIGHT_EYE, landmarks, img_w, img_h)
+            left_ear = calculate_ear(LEFT_EYE, landmarks, calc_w, calc_h)
+            right_ear = calculate_ear(RIGHT_EYE, landmarks, calc_w, calc_h)
             avg_ear = (left_ear + right_ear) / 2.0
             output["ear"] = round(avg_ear, 4)
 
@@ -276,17 +297,17 @@ class CVProcessor:
                 self.drowsy_frames = 0
 
             # Head Pose
-            pitch, yaw, roll = get_head_pose(landmarks, img_w, img_h)
+            pitch, yaw, roll = get_head_pose(landmarks, calc_w, calc_h)
             output["pitch"] = round(pitch, 1)
             output["yaw"] = round(yaw, 1)
             output["roll"] = round(roll, 1)
 
             # Gaze (iris-based)
-            gaze = calculate_gaze(landmarks, img_w, img_h)
+            gaze = calculate_gaze(landmarks, calc_w, calc_h)
             output["gaze_score"] = gaze
 
             # Expression
-            expr = calculate_expression_score(landmarks, img_w, img_h)
+            expr = calculate_expression_score(landmarks, calc_w, calc_h)
             output["expression_score"] = expr
 
             # Micro-expression (landmark movement)
@@ -337,7 +358,7 @@ class CVProcessor:
             # ─── Draw Annotations ─────────────────────────────────────
             annotated = output["annotated_frame"]
 
-            # Bounding box
+            # Bounding box (Use original img_w/img_h for drawing)
             xs = [lm.x * img_w for lm in landmarks]
             ys = [lm.y * img_h for lm in landmarks]
             x1, y1 = int(min(xs)), int(min(ys))
@@ -385,6 +406,7 @@ class CVProcessor:
                         (30, img_h - 30), cv2.FONT_HERSHEY_SIMPLEX,
                         0.8, (0, 0, 255), 2)
 
+        self._last_output = output
         return output
 
     def get_feature_vector(self, output: dict) -> list:

@@ -11,7 +11,7 @@ import fpdf
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
-app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - AI Progress Coach", page_icon="🤖", layout="wide")
 apply_theme()
 
@@ -24,7 +24,7 @@ if "chat_history" not in st.session_state:
 # ─── Database & Context ──────────────────────────────────────────────────────
 db = SessionLocal()
 u_id = get_current_user_id(db)
-thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+thirty_days_ago = datetime.now() - timedelta(days=30)
 sessions = db.query(StudySession).filter(
     StudySession.user_id == u_id,
     StudySession.start_time >= thirty_days_ago,
@@ -44,7 +44,7 @@ if st.session_state.get('current_session_id'):
 context = {
     "history_summary": history_summary,
     "current_session": current_sess,
-    "thresholds": f"{st.session_state.settings_config.get('focused_threshold', 70)}/{st.session_state.settings_config.get('distracted_threshold', 40)}"
+    "thresholds": f"{st.session_state.get('settings_config', {}).get('focused_threshold', 70)}/{st.session_state.get('settings_config', {}).get('distracted_threshold', 40)}"
 }
 
 # ─── Sidebar: Progress Sidebar ──────────────────────────────────────────────
@@ -94,7 +94,7 @@ if user_input:
     # Generate bot msg
     with chat_container.chat_message("assistant", avatar="🤖"):
         with st.spinner("AI Coach Thinking..."):
-            api_key = st.session_state.settings_config.get("gemini_api_key", "")
+            api_key = st.session_state.get("settings_config", {}).get("gemini_api_key", "")
             response = generate_coach_response(api_key, user_input, st.session_state.chat_history, context)
             st.markdown(response)
             st.session_state.chat_history.append({"text": response, "is_user": False, "time": datetime.now()})

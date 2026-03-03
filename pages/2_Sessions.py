@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from database import SessionLocal, StudySession, User, get_current_user_id
-from utils import apply_theme, require_auth, render_page_header, t, format_duration, render_metric_card
+from datetime import datetime, timedelta
+from database import SessionLocal, StudySession, User
+from utils import apply_theme, require_auth, render_page_header, t, format_duration, render_metric_card, get_current_user_id
 from exports import generate_pdf, generate_csv_from_db
 from gemini_utils import generate_session_summary
 
@@ -10,7 +10,7 @@ from gemini_utils import generate_session_summary
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
-app_name = st.session_state.settings_config.get("app_name", "Focus Flow")
+app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - Sessions", page_icon="📚", layout="wide")
 apply_theme()
 
@@ -61,7 +61,7 @@ for sess in sessions:
             st.markdown(f"""
                 <div class="glass-panel" style="border-left: 4px solid #6C63FF; padding: 1.5rem;">
                     <h4>🤖 AI Summary</h4>
-                    <p>{sess.summary_text}</p>
+                    <p style="color:var(--text); opacity:0.9;">{sess.summary_text}</p>
                 </div>
             """, unsafe_allow_html=True)
         
@@ -95,7 +95,7 @@ for sess in sessions:
             if not sess.summary_text and sess.status == 'completed':
                 if st.button("🤖 AI Analysis", key=f"ai_{sess.id}", use_container_width=True):
                     with st.spinner("AI Analysis..."):
-                        api_key = st.session_state.settings_config.get("gemini_api_key", "")
+                        api_key = st.session_state.get("settings_config", {}).get("gemini_api_key", "")
                         summary = generate_session_summary(api_key, {
                             'name': sess.name, 'tag': sess.tag, 'duration': (sess.duration_seconds or 0)/60,
                             'avg_engagement': sess.avg_engagement, 'peak_engagement': sess.peak_engagement,
