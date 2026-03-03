@@ -145,13 +145,6 @@ with col_feed:
         if ctx and hasattr(ctx, 'video_processor') and ctx.video_processor:
             latest = ctx.video_processor.get_latest()
             if latest and 'engagement_score' in latest:
-                score = float(latest.get('engagement_score', 0))
-                ts = time.time()
-                # Initial state updates
-                if score > 0:
-                    st.session_state['live_stats']['scores'].append(score)
-                    st.session_state['live_stats']['timestamps'].append(ts)
-                
                 # Auto-sync data to session state for fragment
                 st.session_state['latest_processor_data'] = latest
 
@@ -318,8 +311,8 @@ with col_controls:
             if latest.get('is_distracted', False):
                 if st.session_state.get('distraction_start_time') is None:
                     st.session_state['distraction_start_time'] = ts
-                if st.session_state.get('current_session_id'):
-                    st.session_state['live_stats']['distractions'] += 1
+                    if st.session_state.get('current_session_id'):
+                        st.session_state['live_stats']['distractions'] += 1
             else:
                 st.session_state['distraction_start_time'] = None
             
@@ -327,33 +320,33 @@ with col_controls:
             if latest.get('is_spoof', False):
                 st.session_state['spoof_count'] = st.session_state.get('spoof_count', 0) + 1
                 if st.session_state['spoof_count'] == 3:
-                    st.toast("📸 Still a photo? Your camera deserves better.", icon="😏")
+                    st.toast("???? Still a photo? Your camera deserves better.", icon="????")
 
-                    # Persist logs to DB (throttled)
-                    if st.session_state.get('current_session_id'):
-                        now = time.time()
-                        last_log = st.session_state.get("last_log_ts", 0)
-                        if now - last_log >= 2:
-                            metrics = {
-                                "ear": latest.get("ear", 0.0),
-                                "pitch": latest.get("pitch", 0.0),
-                                "yaw": latest.get("yaw", 0.0),
-                                "roll": latest.get("roll", 0.0),
-                                "gaze_score": latest.get("gaze_score", 0.0),
-                                "expression_score": latest.get("expression_score", 1.0),
-                                "engagement_score": latest.get("engagement_score", 0.0),
-                                "is_distracted": latest.get("is_distracted", False),
-                                "is_spoof": latest.get("is_spoof", False),
-                            }
-                            try:
-                                db = next(get_db(st.session_state.get("db_url")))
-                                save_engagement_log(db, st.session_state['current_session_id'], metrics)
-                                db.close()
-                                st.session_state["last_log_ts"] = now
-                            except Exception:
-                                # Avoid spamming errors in the UI; just skip this log cycle
-                                st.session_state["last_log_ts"] = now
-            
+            # Persist logs to DB (throttled)
+            if st.session_state.get('current_session_id'):
+                now = time.time()
+                last_log = st.session_state.get("last_log_ts", 0)
+                if now - last_log >= 2:
+                    metrics = {
+                        "ear": latest.get("ear", 0.0),
+                        "pitch": latest.get("pitch", 0.0),
+                        "yaw": latest.get("yaw", 0.0),
+                        "roll": latest.get("roll", 0.0),
+                        "gaze_score": latest.get("gaze_score", 0.0),
+                        "expression_score": latest.get("expression_score", 1.0),
+                        "engagement_score": latest.get("engagement_score", 0.0),
+                        "is_distracted": latest.get("is_distracted", False),
+                        "is_spoof": latest.get("is_spoof", False),
+                    }
+                    try:
+                        db = next(get_db(st.session_state.get("db_url")))
+                        save_engagement_log(db, st.session_state['current_session_id'], metrics)
+                        db.close()
+                        st.session_state["last_log_ts"] = now
+                    except Exception:
+                        # Avoid spamming errors in the UI; just skip this log cycle
+                        st.session_state["last_log_ts"] = now
+
             # Troll / Nudge check
             if st.session_state.get('distraction_start_time') and st.session_state.get('current_session_id'):
                 dist_secs = time.time() - st.session_state['distraction_start_time']

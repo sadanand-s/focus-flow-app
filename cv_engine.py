@@ -23,14 +23,14 @@ MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_land
 def _ensure_model():
     """Download the FaceLandmarker model if not present."""
     if not os.path.exists(MODEL_PATH):
+        os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         try:
             print(f"Downloading FaceLandmarker model to {MODEL_PATH}...")
-            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH, timeout=30)
+            with urllib.request.urlopen(MODEL_URL, timeout=30) as resp, open(MODEL_PATH, "wb") as f:
+                f.write(resp.read())
             print("Download complete.")
         except Exception as e:
             print(f"Model download failed: {e}")
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 
 
 # ─── Landmark Indices (same numbering as legacy FaceMesh) ─────────────────────
