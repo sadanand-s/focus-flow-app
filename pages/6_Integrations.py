@@ -1,6 +1,7 @@
 import streamlit as st
 from utils import apply_theme, require_auth, render_page_header, t
 import json
+import secrets
 
 # ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
@@ -65,10 +66,13 @@ with tab_embed:
     st.subheader("🖼️ Generate Embed Code")
     st.write("Embed your live focus dashboard on your website or LMS.")
     
-    token = "USER_SECRET_TOKEN_4123"
+    if "embed_token_preview" not in st.session_state:
+        st.session_state["embed_token_preview"] = secrets.token_urlsafe(18)
+    token = st.session_state["embed_token_preview"]
     embed_code = f'<iframe src="https://yourapp.streamlit.app/?embed=true&token={token}" width="100%" height="600" style="border:none; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);"></iframe>'
     
     st.code(embed_code, language="html")
+    st.caption("Use a server-side validated token in production. Do not embed permanent tokens in frontend code.")
     if st.button("📋 Copy to Clipboard"):
         st.write("Copied! (Simulation)")
     
@@ -107,7 +111,7 @@ with tab_api:
     st.info("Sidecar active on port `8000`. Access Swagger UI at `/api/docs`.")
     
     if st.button("🗝️ Generate New API Key"):
-        api_key = "fk_live_9sj23kd8sm28sk4m29sdj2"
+        api_key = f"ff_{secrets.token_urlsafe(24)}"
         st.code(api_key)
         st.warning("Copy this key now! It will not be shown again.")
     

@@ -102,11 +102,11 @@
     var vx = 3.2, vy = 2.6;
     var btn = document.getElementById('bouncy-btn');
     var animating = true;
+    var x = window.innerWidth / 2;
+    var y = window.innerHeight / 2;
+    var vx = 3.2, vy = 2.6;
 
-    // Randomize initial direction
-    vx = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 2);
-    vy = (Math.random() > 0.5 ? 1 : -1) * (2.5 + Math.random() * 2);
-
+    // Constrain motion to keep button visible in the iframe
     function bounce() {
       if (!animating || !btn) return;
       var W = window.innerWidth;
@@ -117,24 +117,25 @@
       x += vx;
       y += vy;
 
-      if (x <= 0) { x = 0; vx = Math.abs(vx); }
-      if (x >= W - bw) { x = W - bw; vx = -Math.abs(vx); }
-      if (y <= 0) { y = 0; vy = Math.abs(vy); }
-      if (y >= H - bh) { y = H - bh; vy = -Math.abs(vy); }
+      // Safe bounds (5px padding)
+      if (x <= 5) { x = 5; vx = Math.abs(vx); }
+      if (x >= W - bw - 5) { x = W - bw - 5; vx = -Math.abs(vx); }
+      if (y <= 5) { y = 5; vy = Math.abs(vy); }
+      if (y >= H - bh - 5) { y = H - bh - 5; vy = -Math.abs(vy); }
 
       btn.style.left = x + 'px';
       btn.style.top = y + 'px';
       requestAnimationFrame(bounce);
     }
 
-    // Small delay so button renders with size first
     setTimeout(function () {
+      if (!btn) return;
       var bw = btn.offsetWidth || 160;
       var bh = btn.offsetHeight || 56;
-      x = (window.innerWidth - bw) / 2;
-      y = (window.innerHeight - bh) / 2;
+      x = Math.max(10, (window.innerWidth - bw) / 2);
+      y = Math.max(10, (window.innerHeight - bh) / 2);
       bounce();
-    }, 100);
+    }, 150);
 
     function explodeParticles(cx, cy) {
       var colors = ['#6C63FF', '#00D2FF', '#00E676', '#FFD600', '#FF5252'];

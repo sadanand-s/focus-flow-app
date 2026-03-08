@@ -1,5 +1,5 @@
 """
-0_Demo.py — Demo page showing simulated engagement session (no login required).
+0_Home.py — Home page showing simulated engagement session (no login required).
 """
 import streamlit as st
 import pandas as pd
@@ -7,10 +7,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from utils import apply_theme, generate_fake_session_data, render_page_header, render_metric_card
 
-st.set_page_config(page_title="Demo — Focus Flow", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Home — Focus Flow", page_icon="🧠", layout="wide")
 apply_theme(st.session_state.get("theme", "Dark"))
 
-render_page_header("🎮 Demo Session", "See how Focus Flow works — no login required!")
+render_page_header("🏠 Home", "See how Focus Flow works")
 
 # Generate fake data
 if 'demo_data' not in st.session_state:
@@ -131,9 +131,9 @@ with col_pie:
 with col_cta:
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
-    ### 🚀 Ready to try it live?
+    ### 🚀 Start Tracking Live!
 
-    Create an account and start tracking your real study engagement with your webcam!
+    Go to the **Live Dashboard** in the sidebar to start tracking your real study engagement with your webcam!
 
     The live version includes:
     - ✅ Real-time webcam analysis
@@ -142,11 +142,9 @@ with col_cta:
     - ✅ Fun troll nudges when distracted
     - ✅ PDF & CSV exports
     """)
-    if st.button("🎯 Try Live — Login/Sign Up", type="primary", use_container_width=True):
-        st.switch_page("app.py")
 
 # Regenerate button
 st.markdown("---")
-if st.button("🔄 Regenerate Demo Data"):
+if st.button("🔄 Regenerate Data"):
     st.session_state['demo_data'] = generate_fake_session_data(25)
     st.rerun()

@@ -7,10 +7,17 @@ font = "sans serif"
 
 [server]
 headless = true
-enableCORS = false
-enableXsrfProtection = false
+enableCORS = true
+enableXsrfProtection = true
 maxUploadSize = 50
+# HTTPS support — required for camera/mic access (EAR & Gaze tracking)
+# sslCertFile = ".streamlit/ssl/cert.pem"
+# sslKeyFile  = ".streamlit/ssl/key.pem"
+port = 8501
 
 [browser]
 gatherUsageStats = false
-serverAddress = "localhost"
+
+[runner]
+# Allows the webrtc fragment to auto-refresh properly
+fastReruns = true

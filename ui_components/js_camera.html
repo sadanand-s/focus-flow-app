@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+        }
+
+        #video,
+        #canvas {
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #00FF00;
+            font-family: sans-serif;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Ready</div>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const status = document.getElementById('status');
+        const context = canvas.getContext('2d');
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+                status.innerText = "Camera Active";
+
+                // Set canvas size when video is ready
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    captureFrame();
+                };
+            } catch (err) {
+                status.innerText = "Error: " + err.message;
+                status.style.color = "red";
+            }
+        }
+
+        function captureFrame() {
+            if (video.paused || video.ended) return;
+
+            // Draw video frame to canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to base64
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+
+            // Send back to Streamlit
+            // We use standard window.parent communication if no specific library is loaded
+            window.parent.postMessage({
+                type: 'streamlit-camera-frame',
+                data: dataUrl
+            }, '*');
+
+            // Repeat (~10 FPS)
+            setTimeout(captureFrame, 100);
+        }
+
+        startCamera();
+    </script>
+</body>
+
+</html>

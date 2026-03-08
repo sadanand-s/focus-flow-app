@@ -1,5 +1,6 @@
 """
 utils.py — Shared utilities for the Focus Flow Student Engagement System.
+Modified to bypass authentication as per user request.
 """
 import streamlit as st
 import numpy as np
@@ -344,24 +345,14 @@ def get_theme():
 
 
 def require_auth():
-    """Redirect to login if not authenticated."""
-    if not st.session_state.get("authentication_status"):
-        st.markdown("""
-        <div style="text-align:center;padding:3rem 1rem;">
-            <div style="font-size:3rem;margin-bottom:0.5rem;">🔒</div>
-            <h3 style="color:#9E9E9E;">Please log in to continue</h3>
-            <p style="color:#555;">Use the <b>app</b> page in the sidebar to sign in.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-
+    """Bypasses authentication as requested."""
     # Sync user settings from DB once per session
     if not st.session_state.get("_settings_loaded"):
         try:
             from database import get_db, User, UserSetting
 
             db = next(get_db(st.session_state.get("db_url")))
-            username = st.session_state.get("username")
+            username = st.session_state.get("username", "admin")
             if username:
                 user = db.query(User).filter(User.username == username).first()
                 if not user:
@@ -399,7 +390,7 @@ def require_auth():
 def get_current_user_id(db):
     """Get (or create) the User row for the logged-in username."""
     from database import User
-    username = st.session_state.get("username", "anonymous")
+    username = st.session_state.get("username", "admin")
     user = db.query(User).filter(User.username == username).first()
     if not user:
         user = User(username=username, email=f"{username}@focusflow.app")
@@ -491,12 +482,12 @@ def generate_fake_session_data(duration_minutes: int = 30):
 
 
 def init_session_defaults():
-    """Initialize all session state defaults."""
+    """Initialize all session state defaults. Modified to bypass auth."""
     defaults = {
-        # Auth
-        "authentication_status": None,
-        "name": None,
-        "username": None,
+        # Auth (Bypassed)
+        "authentication_status": True,
+        "name": "Administrator",
+        "username": "admin",
         # Troll / UI
         "troll_caught": False,
         "troll_mode": True,

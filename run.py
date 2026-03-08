@@ -12,24 +12,43 @@ import os
 
 
 # ─── Python 3.14 asyncio compatibility patch ─────────────────────────────────
+import threading
+
+_loop_lock = threading.Lock()
+
 def _patched_get_event_loop():
     """Create and set a new event loop if none exists (Python 3.14 fix)."""
     try:
-        loop = asyncio._get_running_loop()
-        if loop is not None:
-            return loop
-    except AttributeError:
-        pass
-    # Create a new loop if none is running
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
-    except Exception as e:
-        raise RuntimeError(f'Could not create event loop: {e}')
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        with _loop_lock:
+            try:
+                # Double check inside lock
+                return asyncio.get_event_loop_policy().get_event_loop()
+            except (RuntimeError, AssertionError):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                return loop
 
-
+# Apply patches early
 asyncio.get_event_loop = _patched_get_event_loop
+
+# Also patch the default policy if it's the old one
+try:
+    policy = asyncio.get_event_loop_policy()
+    if not hasattr(policy, '_patched'):
+        old_get_loop = policy.get_event_loop
+        def patched_get_loop(self):
+            try:
+                return old_get_loop()
+            except (RuntimeError, AssertionError):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                return loop
+        policy.get_event_loop = patched_get_loop.__get__(policy, type(policy))
+        policy._patched = True
+except Exception:
+    pass
 
 # ─── Launch Streamlit ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
@@ -43,6 +62,6 @@ if __name__ == "__main__":
         "--server.port", "8501",
         "--server.headless", "true",
         "--browser.gatherUsageStats", "false",
-        "--server.enableXsrfProtection", "false",
+        "--server.enableXsrfProtection", "true",
     ]
     stcli.main()

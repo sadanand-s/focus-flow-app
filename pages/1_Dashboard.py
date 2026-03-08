@@ -17,11 +17,22 @@ from troll_system import check_and_trigger
 
 # ─── WebRTC Import (graceful fallback) ───────────────────────────────────────
 try:
-    import av
     import cv2
-    from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
+except ImportError as _e:
+    st.error(f"OpenCV is required for camera processing: {_e}")
+    st.stop()
+
+try:
     from cv_engine import CVProcessor
+except ImportError as _e:
+    st.error(f"Vision engine failed to load: {_e}")
+    st.stop()
+
+try:
+    import av
+    from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
     HAS_WEBRTC = True
+    _WEBRTC_ERR = ""
 except ImportError as _e:
     HAS_WEBRTC = False
     _WEBRTC_ERR = str(_e)
@@ -48,6 +59,8 @@ for _k, _v in {
     'spoof_banner_dismissed': False,
     'spoof_banner_dismissed_at': 0,
     'last_troll_time': 0,
+    'current_troll_html': None,
+    'troll_expire_at': 0,
     'mood_checked': False,
     'mood_score': None,
 }.items():
@@ -110,6 +123,67 @@ if HAS_WEBRTC:
     })
 
 
+# ─── Camera Modes ─────────────────────────────────────────────────────────────
+CAM_MODES = ["WebRTC (Standard)", "Direct Local (OpenCV)", "Snapshot (Safe Mode)"]
+if "cam_mode" not in st.session_state:
+    st.session_state["cam_mode"] = CAM_MODES[0]
+
+with st.sidebar:
+    st.divider()
+    st.subheader("⚙️ Camera Configuration")
+    selected_mode = st.radio(
+        "Select Engine",
+        CAM_MODES,
+        help="Use 'Direct Local' if you encounter any issues with WebRTC.",
+        index=CAM_MODES.index(st.session_state.get("cam_mode", CAM_MODES[0]))
+    )
+    st.session_state["cam_mode"] = selected_mode
+
+    with st.sidebar.expander("🛠️ WebRTC Diagnostics"):
+        if st.session_state["cam_mode"] == "Direct Local (OpenCV)":
+            st.success("✅ Direct Engine Active")
+            st.info("Direct mode bypasses browser WebRTC limitations.")
+        else:
+            if not HAS_WEBRTC:
+                st.error("❌ WebRTC Library missing")
+            else:
+                st.write("Ready to connect...")
+        
+        st.caption("Tip: Use local IP or localhost for testing.")
+
+    st.divider()
+
+class LocalVideoCapture:
+    """Fallback OpenCV capture engine for local Windows dev."""
+    def __init__(self):
+        self.cap = None
+        self.processor = CVProcessor()
+        self.is_running = False
+
+    def start(self):
+        if not self.cap or not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            self.is_running = True
+        return self.cap.isOpened()
+
+    def stop(self):
+        self.is_running = False
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+    def get_frame(self):
+        if self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                return frame
+        return None
+
+
+
 # ─── Layout ──────────────────────────────────────────────────────────────────
 col_feed, col_controls = st.columns([3, 2])
 ctx = None
@@ -118,25 +192,108 @@ ctx = None
 with col_feed:
     st.subheader("📹 Live Feed")
 
-    if not HAS_WEBRTC:
-        st.error(f"""
-        **Camera unavailable** — `streamlit-webrtc` or `av` package is missing.
-
-        Install with:
-        ```bash
-        pip install streamlit-webrtc av opencv-python-headless
-        ```
-        """)
+    if st.session_state["cam_mode"] == "WebRTC (Standard)":
+        if not HAS_WEBRTC:
+            st.error(f"""
+            **Camera unavailable** — `streamlit-webrtc` or `av` package is missing.
+            Error: `{_WEBRTC_ERR}`
+    
+            Install with:
+            ```bash
+            pip install streamlit-webrtc av opencv-python-headless
+            ```
+            """)
+        else:
+            # WebRTC streamer
+            ctx = webrtc_streamer(
+                key="engagement_feed",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=RTC_CONFIG,
+                video_processor_factory=EngagementVideoProcessor,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+    elif st.session_state["cam_mode"] == "Snapshot (Safe Mode)":
+        # ── Snapshot Mode (Streamlit Native) ──────────────────
+        st.info("Snapshot mode uses the browser's native camera capture. Click the button to analyze a frame.")
+        
+        img_file = st.camera_input("Take a snapshot for analysis")
+        
+        if img_file:
+            # Convert uploaded file to OpenCV format
+            file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+            frame = cv2.imdecode(file_bytes, 1)
+            
+            if "snapshot_processor" not in st.session_state:
+                st.session_state.snapshot_processor = CVProcessor()
+            
+            results = st.session_state.snapshot_processor.process_frame(frame)
+            st.session_state['latest_processor_data'] = results
+            
+            # Show results
+            st.image(results['annotated_frame'], channels="BGR", caption="Analyzed Frame", use_container_width=True)
+            if results.get('engagement_score', 0) > 0:
+                st.success(f"Engagement Analyzed: {results['engagement_score']}% ({results['engagement_label']})")
+                
+                # Manual trigger check for Snapshot (Instant check)
+                if st.session_state.get('current_session_id'):
+                    snapshot_dist_seconds = st.session_state.get("settings_config", {}).get("n_delay", 2)
+                    troll_result = check_and_trigger(
+                        snapshot_dist_seconds,
+                        engagement_score=results['engagement_score'],
+                        sensitivity=st.session_state.get('nudge_sensitivity', 'Medium'),
+                        troll_mode=st.session_state.get('troll_mode', True),
+                        nudge_only=st.session_state.get('nudge_only', False),
+                    )
+                    if troll_result['should_trigger'] and troll_result['html']:
+                        st.markdown(troll_result['html'], unsafe_allow_html=True)
     else:
-        # WebRTC streamer
-        ctx = webrtc_streamer(
-            key="engagement_feed",
-            mode=WebRtcMode.SENDRECV,
-            rtc_configuration=RTC_CONFIG,
-            video_processor_factory=EngagementVideoProcessor,
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
+        # ── Direct Local Mode (OpenCV) ───────────────────────────
+        st.info("Direct Local Engine active. Browsers ignore this stream but your local PC processes it directly.")
+        
+        col_st, col_sp = st.columns([1, 1])
+        with col_st:
+            start_local = st.button("▶️ Start Camera", type="primary", use_container_width=True)
+        with col_sp:
+            stop_local = st.button("⏹️ Stop Camera", use_container_width=True)
+
+        img_placeholder = st.empty()
+        
+        # Local Loop Logic
+        if "local_cap" not in st.session_state:
+            st.session_state.local_cap = LocalVideoCapture()
+
+        if start_local:
+            if st.session_state.local_cap.start():
+                st.session_state["local_running"] = True
+                st.rerun()
+            else:
+                st.error("Failed to connect to local camera. Ensure no other app is using it.")
+
+        if stop_local:
+            st.session_state.local_cap.stop()
+            st.session_state["local_running"] = False
+            img_placeholder.info("Camera stopped.")
+            st.rerun()
+
+        # Handle Direct Loop in a Fragment to avoid blocking the main UI
+        @st.fragment(run_every=0.1) # Fast refresh for local camera
+        def render_local_loop():
+            if st.session_state.get("local_running", False):
+                frame = st.session_state.local_cap.get_frame()
+                if frame is not None:
+                    results = st.session_state.local_cap.processor.process_frame(frame)
+                    st.session_state['latest_processor_data'] = results
+                    img_placeholder.image(results['annotated_frame'], channels="BGR", use_container_width=True)
+                    
+                    # Immediate troll check for local mode
+                    if results.get('is_distracted', False):
+                        if st.session_state.get('distraction_start_time') is None:
+                            st.session_state['distraction_start_time'] = time.time()
+                    else:
+                        st.session_state['distraction_start_time'] = None
+
+        render_local_loop()
 
         # Spoof banner
         if st.session_state.get('spoof_count', 0) > 5:
@@ -320,7 +477,7 @@ with col_controls:
             if latest.get('is_spoof', False):
                 st.session_state['spoof_count'] = st.session_state.get('spoof_count', 0) + 1
                 if st.session_state['spoof_count'] == 3:
-                    st.toast("???? Still a photo? Your camera deserves better.", icon="????")
+                    st.toast("Still a photo? Your camera deserves better.", icon="📷")
 
             # Persist logs to DB (throttled)
             if st.session_state.get('current_session_id'):
@@ -347,17 +504,32 @@ with col_controls:
                         # Avoid spamming errors in the UI; just skip this log cycle
                         st.session_state["last_log_ts"] = now
 
-            # Troll / Nudge check
-            if st.session_state.get('distraction_start_time') and st.session_state.get('current_session_id'):
+            # Troll / Nudge check logic (updates state)
+            if st.session_state.get('distraction_start_time'):
                 dist_secs = time.time() - st.session_state['distraction_start_time']
                 troll_result = check_and_trigger(
                     dist_secs,
+                    engagement_score=score,
                     sensitivity=st.session_state.get('nudge_sensitivity', 'Medium'),
                     troll_mode=st.session_state.get('troll_mode', True),
                     nudge_only=st.session_state.get('nudge_only', False),
                 )
                 if troll_result['should_trigger'] and troll_result['html']:
-                    st.markdown(troll_result['html'], unsafe_allow_html=True)
+                    st.session_state['current_troll_html'] = troll_result['html']
+                    st.session_state['troll_expire_at'] = time.time() + 15
+
+            # High Visibility Warning for Low Engagement
+            if score < 40:
+                st.markdown("""
+                <div style="background:rgba(255,82,82,0.15); border:2px solid #FF5252; 
+                    border-radius:10px; padding:10px; text-align:center; margin-bottom:10px;
+                    animation: blinker 1s linear infinite;">
+                    <b style="color:#FF5252; font-size:1.1rem;">⚠️ LOW ENGAGEMENT DETECTED</b>
+                </div>
+                <style>
+                    @keyframes blinker { 50% { opacity: 0.3; } }
+                </style>
+                """, unsafe_allow_html=True)
 
         stats = st.session_state['live_stats']
         if stats['scores']:
@@ -450,6 +622,13 @@ with col_controls:
             st.info("📊 Timeline will update once session data is recorded.")
 
     render_live_dashboard()
+
+# ─── Global Troll Renderer ────────────────────────────────────────────────────
+if st.session_state.get('current_troll_html'):
+    if time.time() < st.session_state.get('troll_expire_at', 0):
+        st.markdown(st.session_state['current_troll_html'], unsafe_allow_html=True)
+    else:
+        st.session_state['current_troll_html'] = None
 
 
 # Footer or extra logic can go here

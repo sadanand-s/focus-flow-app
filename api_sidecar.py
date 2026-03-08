@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional
 import json
+import os
 
 from database import get_db, get_engine, init_db, StudySession, EngagementLog, User
 
@@ -17,9 +18,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
+_allowed_origins = os.getenv("API_ALLOWED_ORIGINS", "http://localhost:8501,http://127.0.0.1:8501")
+ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS or ["http://localhost:8501"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,9 +39,15 @@ def startup():
 # ─── Auth ────────────────────────────────────────────────────────────────────
 async def verify_api_key(authorization: str = Header(None)):
     """Simple API key verification. In production, validate against DB."""
-    if not authorization or not authorization.startswith("Bearer ff_"):
+    expected_key = os.getenv("FOCUS_FLOW_API_KEY", "").strip()
+    if not expected_key:
+        raise HTTPException(status_code=503, detail="API key is not configured on server")
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid API key")
-    return authorization.split("Bearer ")[1]
+    provided = authorization.split("Bearer ", 1)[1].strip()
+    if provided != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return provided
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
@@ -141,7 +151,7 @@ async def receive_webhook(webhook_id: str, payload: WebhookPayload):
         "received": True,
         "webhook_id": webhook_id,
         "event_type": payload.event_type,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -159,7 +169,7 @@ async def get_stats(api_key: str = Depends(verify_api_key)):
         "total_sessions": total_sessions,
         "completed_sessions": completed,
         "total_engagement_logs": total_logs,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

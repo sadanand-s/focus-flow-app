@@ -1,47 +1,46 @@
-# Python
+# --- Vibe Coding & Secret Safety ---
+.env
+.env.*
+secrets.json
+credentials.json
+*.pem
+*.key
+
+# --- Streamlit Secrets (NEVER commit actual secrets) ---
+.streamlit/secrets.toml
+
+# --- Antigravity & AI Tooling ---
+.antigravity/
+antigravity.log
+.aider/
+.cursor/
+.windsurf/
+.gpt-pilot/
+chat_history.json
+*.trace
+
+# --- Python Environment ---
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
+venv/
+venv_focus/
+.venv/
 env/
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.flakes/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
 
-# Database
+# --- Database (local SQLite — not for cloud) ---
 *.db
 *.sqlite3
 
-# Models & Training
-*.pkl
-training_history.json
-
-# Streamlit
-.streamlit/secrets.toml
-
-# Environment Variables
-.env
-auth_config_local.yaml
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+# --- System & OS Garbage ---
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+
+# --- Logs & output ---
+output.log
+*.log

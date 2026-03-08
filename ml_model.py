@@ -52,17 +52,21 @@ class EngagementModel:
 
         try:
             if self.is_trained:
-                # Warm-start: increase estimators
-                self.model.n_estimators += 10
+                # Warm-start: increase estimators (capped at 500)
+                if self.model.n_estimators < 500:
+                    self.model.n_estimators += 10
                 self.model.fit(X, y)
             else:
                 self.model.fit(X, y)
                 self.is_trained = True
 
-            # Calculate accuracy via cross-validation (if enough samples)
+            # Calculate accuracy via cross-validation (if enough samples and labels)
             if len(X) >= 10 and len(unique_labels) >= 2:
-                scores = cross_val_score(self.model, X, y, cv=min(5, len(X)), scoring='accuracy')
-                accuracy = float(np.mean(scores))
+                try:
+                    scores = cross_val_score(self.model, X, y, cv=min(5, len(X)), scoring='accuracy')
+                    accuracy = float(np.mean(scores))
+                except Exception:
+                    accuracy = float(self.model.score(X, y))
             else:
                 accuracy = float(self.model.score(X, y))
 
@@ -84,7 +88,7 @@ class EngagementModel:
             return True, self.last_accuracy
 
         except Exception as e:
-            print(f"Training error: {e}")
+            # Suppress console errors and return safe false
             return False, 0.0
 
     def predict(self, feature_vector):

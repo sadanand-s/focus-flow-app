@@ -3,6 +3,7 @@ database.py — SQLAlchemy database layer with configurable engine.
 Supports SQLite (default) and PostgreSQL/Supabase.
 """
 import os
+import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import (create_engine, Column, Integer, String, Float,
@@ -228,3 +229,49 @@ def get_training_data(db, user_id: int):
             .filter(TrainingData.user_id == user_id)
             .order_by(TrainingData.timestamp)
             .all())
+
+
+def get_training_dataset(db, user_id: int) -> Tuple[List[List[float]], List[int]]:
+    """
+    Build a training dataset for a user.
+    Priority:
+    1) Explicit `training_data` rows (if present).
+    2) Logs from completed sessions marked as ground-truth.
+    """
+    features: List[List[float]] = []
+    labels: List[int] = []
+
+    samples = get_training_data(db, user_id)
+    for s in samples:
+        try:
+            vec = json.loads(s.feature_vector) if isinstance(s.feature_vector, str) else s.feature_vector
+            if isinstance(vec, list) and len(vec) >= 6:
+                features.append([float(v) for v in vec[:6]])
+                labels.append(int(s.label))
+        except Exception:
+            continue
+
+    if features:
+        return features, labels
+
+    logs = (db.query(EngagementLog)
+            .join(StudySession, StudySession.id == EngagementLog.session_id)
+            .filter(
+                StudySession.user_id == user_id,
+                StudySession.status == "completed",
+                StudySession.is_ground_truth.is_(True),
+            )
+            .all())
+
+    for l in logs:
+        features.append([
+            float(l.ear_value or 0.0),
+            float(l.head_pitch or 0.0),
+            float(l.head_yaw or 0.0),
+            float(l.head_roll or 0.0),
+            float(l.gaze_score or 0.0),
+            float(l.expression_score or 1.0),
+        ])
+        labels.append(0 if bool(l.is_distracted) else 1)
+
+    return features, labels

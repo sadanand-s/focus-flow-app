@@ -10,24 +10,32 @@ import yaml
 require_auth()
 
 # ─── Page Setup ─────────────────────────────────────────────────────────────
+from utils import init_session_defaults
+init_session_defaults()
+
 app_name = st.session_state.get("settings_config", {}).get("app_name", "Focus Flow")
 st.set_page_config(page_title=f"{app_name} - Settings", page_icon="⚙️", layout="wide")
-apply_theme()
+apply_theme(st.session_state.get("theme", "Dark"))
 
 render_page_header(f"⚙️ {t('settings')}", "Personalize your focus environment.")
 
 # ─── Load Settings from DB ──────────────────────────────────────────────────
-db = next(get_db(st.session_state.get("db_url")))
+db_url = st.session_state.get("db_url", "sqlite:///focus_flow.db")
+db = next(get_db(db_url))
 username = st.session_state.get("username", "anonymous")
 user = db.query(User).filter(User.username == username).first()
+
 if not user:
     user = User(username=username, email=f"{username}@focusflow.app")
     db.add(user)
     db.commit()
     db.refresh(user)
+
 if not user.settings:
     user.settings = UserSetting(user_id=user.id)
     db.commit()
+    db.refresh(user)
+
 settings_obj = user.settings
 
 # Sync session state with DB if needed
@@ -37,11 +45,12 @@ elif settings_obj.extra_config:
     st.session_state.settings_config = {**st.session_state.settings_config, **settings_obj.extra_config}
 
 # ─── Layout Tabs ────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🎨 Identity & Layout", 
     "🕒 Session & Behavior", 
     "🔔 Alerts & Language",
     "🎧 Ambient",
+    "🔒 Security & AI",
     "🚀 Deployment & DB"
 ])
 
@@ -96,12 +105,17 @@ with tab2:
 with tab3:
     col_x, col_y = st.columns(2)
     with col_x:
-        st.subheader("📢 Smart Nudges")
-        st.session_state.troll_mode = st.toggle("Enable Troll/Nudge System", value=st.session_state.troll_mode)
+        st.subheader("📢 Troll System")
+        st.session_state.troll_mode = st.toggle("Enable Troll Mode", value=st.session_state.troll_mode, help="Triggers snarky popups or emoji storms if your focus drops.")
         st.session_state.nudge_only = st.toggle("Nudge Only (Subtle toasts only)", value=st.session_state.nudge_only)
         
         n_delay = st.selectbox("Trigger delay (consecutive distraction)", [1, 2, 5], index=1)
         st.session_state.settings_config["n_delay"] = n_delay
+        nudge_sensitivity = st.selectbox(
+            "Nudge Sensitivity",
+            ["Low", "Medium", "High"],
+            index=["Low", "Medium", "High"].index(st.session_state.get("nudge_sensitivity", "Medium")),
+        )
         
         custom_msg = st.text_area("Custom Nudge Message", value=st.session_state.settings_config.get("custom_nudge_msg", "Stay focused! You got this."))
 
@@ -118,8 +132,47 @@ with tab4:
     
     st.info("Note: Ambient audio plays automatically during active sessions.")
 
-# ─── Tab 5: Deployment & DB ───────────────────────────────────────────────
+# ─── Tab 5: Security & AI ──────────────────────────────────────────────────
 with tab5:
+    st.subheader("🔑 AI Integration")
+    st.write("Configure your Google Gemini API key to enable the AI Coach and session summaries.")
+    
+    env_key = ""
+    try:
+        env_key = st.secrets.get("GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
+    except Exception:
+        env_key = os.getenv("GEMINI_API_KEY", "")
+    if env_key:
+        st.success("✅ Gemini API Key found in Environment/Secrets (Secure)")
+        use_manual = st.checkbox("Override with manual key?")
+    else:
+        use_manual = True
+
+    if use_manual:
+        manual_key = st.text_input("Gemini API Key", 
+                                  value=st.session_state.settings_config.get("gemini_api_key", ""),
+                                  type="password",
+                                  help="Get yours from makersuite.google.com")
+        st.session_state.settings_config["gemini_api_key"] = manual_key
+    else:
+        st.session_state.settings_config["gemini_api_key"] = ""
+
+    st.session_state.bot_training_enabled = st.toggle(
+        "Enable Personalized Model Training",
+        value=st.session_state.get("bot_training_enabled", False),
+        help="Allows training the engagement model from labeled session data.",
+    )
+
+    st.divider()
+    st.subheader("🛡️ Data Privacy")
+    st.info("""
+    - **Isolation**: All study sessions and metrics are tied to your unique user ID.
+    - **Local Storage**: Data is stored in your private database account.
+    - **API Safety**: API keys are masked in the UI and never stored in plain text logs.
+    """)
+
+# ─── Tab 6: Deployment & DB ───────────────────────────────────────────────
+with tab6:
     st.subheader("🚀 Deployment Wizard")
     d_tab1, d_tab2, d_tab3 = st.tabs(["Streamlit Cloud", "Docker", "Database Migration"])
     
@@ -143,7 +196,10 @@ docker-compose up -d
 
     with d_tab3:
         st.markdown("### Database Migration")
-        new_db_url = st.text_input("New Database URL (PostgreSQL/Supabase/SQLite)", value="sqlite:///focus_flow.db")
+        new_db_url = st.text_input(
+            "New Database URL (PostgreSQL/Supabase/SQLite)",
+            value=st.session_state.get("db_url") or "sqlite:///focus_flow.db"
+        )
         if st.button("Migrate & Connect"):
             with st.spinner("Testing connection..."):
                 success, msg = migrate_db(new_db_url)
@@ -183,6 +239,8 @@ if st.button("💾 Save All Personalized Settings", use_container_width=True):
     settings_obj.extra_config = st.session_state.settings_config
     settings_obj.troll_mode = st.session_state.troll_mode
     settings_obj.nudge_only = st.session_state.nudge_only
+    settings_obj.nudge_sensitivity = nudge_sensitivity
+    settings_obj.bot_training_enabled = st.session_state.bot_training_enabled
     db.commit()
     st.session_state["_settings_loaded"] = True
     

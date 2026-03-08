@@ -4,9 +4,23 @@ Includes multi-turn conversation support and context-aware coaching.
 """
 import google.generativeai as genai
 import time
+import os
+import streamlit as st
+
+def _get_api_key(passed_key: str = None) -> str:
+    """Helper to get API key from various sources (Arg > Secrets > Env)."""
+    if passed_key: return passed_key
+    # Try Streamlit Secrets
+    try:
+        if "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
+    except Exception: pass
+    # Try OS Env
+    return os.getenv("GEMINI_API_KEY", "")
 
 def generate_session_summary(api_key: str, session_stats: dict) -> str:
     """Generate a comprehensive session summary using Gemini AI."""
+    api_key = _get_api_key(api_key)
     if not api_key: return _template_summary(session_stats)
     try:
         genai.configure(api_key=api_key)
@@ -24,6 +38,7 @@ def generate_session_summary(api_key: str, session_stats: dict) -> str:
 
 def generate_realtime_suggestion(api_key: str, context: dict) -> str:
     """Generate a brief real-time refocus nudge."""
+    api_key = _get_api_key(api_key)
     if not api_key: return _template_suggestion(context)
     try:
         genai.configure(api_key=api_key)
@@ -37,6 +52,7 @@ def generate_coach_response(api_key: str, user_query: str, chat_history: list, c
     Generate a conversational response from the AI Coach.
     Context includes: last 30 days session summaries, current session stats, user preferences.
     """
+    api_key = _get_api_key(api_key)
     if not api_key: 
         return "🤖 **AI Coach (Demo Mode):** I need a Gemini API key in Settings to give personalized insights! Based on your query, focus on consistency. 💡 Try the Pomodoro technique!"
 

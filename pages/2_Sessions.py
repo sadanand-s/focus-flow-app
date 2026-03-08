@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from database import get_db, StudySession
+from database import get_db, StudySession, get_training_dataset
 from utils import apply_theme, require_auth, render_page_header, t, format_duration, render_metric_card, get_current_user_id
 from exports import generate_pdf, generate_csv_from_db
 from gemini_utils import generate_session_summary
+from ml_model import EngagementModel
 
 # ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
@@ -24,6 +25,30 @@ sessions = db.query(StudySession).filter(StudySession.user_id == u_id).order_by(
 if not sessions:
     st.info("No sessions recorded yet. Start one on the Dashboard! 🚀")
     st.stop()
+
+
+@st.cache_resource
+def _get_model():
+    return EngagementModel()
+
+
+labeled_completed = [s for s in sessions if s.status == "completed" and s.is_ground_truth]
+train_col1, train_col2 = st.columns([2, 1])
+with train_col1:
+    st.info(
+        f"Ground-truth sessions available for training: {len(labeled_completed)}. "
+        "Label completed sessions, then train the model for better personalization."
+    )
+with train_col2:
+    model = _get_model()
+    if st.button("Train AI Model", use_container_width=True):
+        features, labels = get_training_dataset(db, u_id)
+        ok, acc = model.train(features, labels)
+        if ok:
+            st.success(f"Model trained successfully. Accuracy: {acc * 100:.1f}%")
+        else:
+            st.warning("Not enough balanced labeled data yet. Label more focused and distracted samples.")
+    st.caption(f"Last accuracy: {model.get_accuracy() * 100:.1f}%")
 
 # ─── Filter Bar ─────────────────────────────────────────────────────────────
 col_f1, col_f2, col_f3 = st.columns(3)
