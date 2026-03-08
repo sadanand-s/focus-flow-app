@@ -104,13 +104,14 @@ def calculate_mar(landmarks, img_w, img_h):
 
 def get_head_pose(landmarks, img_w, img_h):
     """Estimate head pose (pitch, yaw, roll) using solvePnP."""
+    # Standard 3D model points
     model_points = np.array([
-        (0.0,    0.0,    0.0),       # Nose tip           (1)
-        (-225.0, 170.0, -135.0),     # Right eye corner   (33)
-        (225.0,  170.0, -135.0),     # Left eye corner    (263)
-        (150.0,  -150.0,-125.0),     # Right mouth corner (287)
-        (-150.0, -150.0,-125.0),     # Left mouth corner  (57)
-        (0.0,   -330.0, -65.0),      # Chin               (152)
+        (0.0,    0.0,    0.0),       # Nose tip
+        (-225.0, 170.0, -135.0),     # Right eye corner
+        (225.0,  170.0, -135.0),     # Left eye corner
+        (150.0,  -150.0,-125.0),     # Right mouth corner
+        (-150.0, -150.0,-125.0),     # Left mouth corner
+        (0.0,   -330.0, -65.0),      # Chin
     ], dtype=np.float64)
 
     face_2d = []
@@ -133,7 +134,31 @@ def get_head_pose(landmarks, img_w, img_h):
 
     rmat, _ = cv2.Rodrigues(rot_vec)
     angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
-    return angles[0], angles[1], angles[2]  # pitch, yaw, roll
+    return angles[0], angles[1], angles[2]
+
+
+def calculate_emotion(landmarks, mar, ear):
+    """
+    Heuristic-based focus/mood classification.
+    Returns: label (str), confidence (float)
+    """
+    # Simple heuristics using mouth (MAR) and eyes (EAR)
+    # Smile: Wide mouth + horizontal stretch
+    # Tired: Low EAR + High MAR (yawning)
+    # Focused: Stable EAR + neutral mouth
+    
+    if mar > 0.45:
+        return "Tired/Yawning", 0.9
+    if mar < 0.15:
+        return "Focused", 0.85
+    if mar > 0.28:
+        return "Engaged/Smiling", 0.7
+        
+    if ear < 0.22:
+        return "Sleepy", 0.9
+        
+    return "Neutral/Focused", 0.8
+
 
 
 def calculate_gaze(landmarks, img_w, img_h):
@@ -426,6 +451,7 @@ class CVProcessor:
             "engagement_label": "Away",
             "annotated_frame":  frame.copy(),
             "conditions":       self._last_conditions,
+            "sentiment":        "Unknown", # Added sentiment
             # Debug extras
             "raw_score":        0.0,
             "ema_score":        self._ema_score,
@@ -577,12 +603,15 @@ class CVProcessor:
                 output["engagement_label"] = "Deep Focus"
             elif final_score >= 80:
                 output["engagement_label"] = "Focused"
-            elif final_score >= 56:
-                output["engagement_label"] = "Moderate Focus"
             elif final_score >= 36:
                 output["engagement_label"] = "Neutral / Drifting"
             else:
                 output["engagement_label"] = "Distracted"
+
+            # ── Sentiment / Emotion Label ────────────────────────
+            sentiment_label, _ = calculate_emotion(landmarks, mar, avg_ear)
+            output["sentiment"] = sentiment_label
+
 
             # Calibration data collection
             if self.is_calibrating:
@@ -613,6 +642,11 @@ class CVProcessor:
             score_text = f"{output['engagement_label']} ({final_score}%)"
             cv2.putText(annotated, score_text, (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
+
+            # Mood overlay
+            cv2.putText(annotated, f"Mood: {sentiment_label}", (10, img_h - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+
 
             # Conditions warning badge
             if not self._last_conditions["ok"]:

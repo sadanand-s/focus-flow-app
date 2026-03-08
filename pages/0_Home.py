@@ -21,8 +21,31 @@ db = next(get_db(st.session_state.get("db_url")))
 try:
     user_id = get_current_user_id(db)
     all_sessions = get_user_sessions(db, user_id, status="completed")
+    
+    # ─── Lifetime Focus Stats (XP System) ──────────────────────────
+    # Focus XP = Sum of (Duration * Avg Engagement / 100)
+    total_xp = sum((s.duration_seconds or 0) * (s.avg_engagement or 0) / 100 for s in all_sessions)
+    
+    # Define Ranks
+    ranks = [
+        (0, "Apprentice 🧑‍🎓", "#9E9E9E"),
+        (1000, "Focused Scholar 📚", "#00D2FF"),
+        (5000, "Attention Monk 🧘", "#6C63FF"),
+        (15000, "Zen Master 🏮", "#FFD700"),
+        (50000, "Focus Legend 🐉", "#FF5252")
+    ]
+    
+    current_rank = ranks[0]
+    next_rank = ranks[1]
+    for i, r in enumerate(ranks):
+        if total_xp >= r[0]:
+            current_rank = r
+            next_rank = ranks[i+1] if i+1 < len(ranks) else None
 except Exception as e:
     all_sessions = []
+    total_xp = 0
+    current_rank = (0, "Apprentice 🧑‍🎓", "#9E9E9E")
+    next_rank = None
 
 # ─── No sessions yet: First-run guide ────────────────────────────────────────
 if not all_sessions:
@@ -70,8 +93,37 @@ if not all_sessions:
         if st.button("📹 Go to Dashboard & Start a Session", type="primary", use_container_width=True):
             st.switch_page("pages/1_Dashboard.py")
 
+    st.divider()
     db.close()
     st.stop()
+
+# ─── Zen Level Progress Bar ──────────────────────────────────────────────────
+if all_sessions:
+    xp_limit = next_rank[0] if next_rank else current_rank[0]
+    progress = min(1.0, total_xp / xp_limit) if xp_limit > 0 else 1.0
+    
+    st.markdown(f"""
+    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); 
+        border-radius:15px; padding:1.2rem; margin-bottom:2rem; display:flex; align-items:center; gap:20px;">
+        <div style="font-size:3rem; min-width:80px; text-align:center;">{current_rank[1].split(' ')[1]}</div>
+        <div style="flex-grow:1;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:flex-end;">
+                <div>
+                    <span style="color:#9E9E9E; font-size:0.8rem; text-transform:uppercase; letter-spacing:1px;">Current Rank</span><br>
+                    <b style="color:{current_rank[2]}; font-size:1.4rem;">{current_rank[1].split(' ')[0]}</b>
+                </div>
+                <div style="text-align:right;">
+                    <span style="color:#9E9E9E; font-size:0.8rem;">{int(total_xp)} / {int(xp_limit)} XP</span>
+                </div>
+            </div>
+            <div style="height:10px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden;">
+                <div style="height:100%; width:{progress*100}%; background:linear-gradient(90deg, {current_rank[2]}, #FFF); 
+                    box-shadow: 0 0 15px {current_rank[2]}44; border-radius:10px;"></div>
+            </div>
+            {f'<div style="font-size:0.75rem; color:#9E9E9E; margin-top:6px;">Target: Next level at {int(xp_limit)} XP</div>' if next_rank else ''}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ─── Sessions exist — show real stats ─────────────────────────────────────────
 

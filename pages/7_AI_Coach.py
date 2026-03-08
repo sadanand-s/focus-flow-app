@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from database import get_db, StudySession
+from database import get_db, StudySession, EngagementLog
 from utils import apply_theme, require_auth, render_page_header, t, get_current_user_id
 from gemini_utils import generate_coach_response
 import io
 from fpdf import FPDF
 import plotly.express as px
+import time
 
 # ─── Auth Guard ─────────────────────────────────────────────────────────────
 require_auth()
@@ -30,20 +31,28 @@ sessions = db.query(StudySession).filter(
     StudySession.user_id == u_id,
     StudySession.start_time >= thirty_days_ago,
     StudySession.status == 'completed'
-).all()
+).order_by(StudySession.start_time.desc()).all()
 
 # Create history summary
 history_data = []
+deep_history = []
 for s in sessions:
     history_data.append(f"Date: {s.start_time.date()}, Topic: {s.name}, Focus: {s.avg_engagement:.0f}%, Distractions: {s.total_distractions}")
+    
+# Detailed analytics for top 3 recent sessions
+for s in sessions[:3]:
+    logs = db.query(EngagementLog).filter(EngagementLog.session_id == s.id).all()
+    if logs:
+        avg_ear = sum(l.ear_value for l in logs) / len(logs)
+        avg_gaze = sum(l.gaze_score for l in logs) / len(logs)
+        deep_history.append(f"Session {s.name}: Avg EAR {avg_ear:.2f}, Gaze {avg_gaze:.2f}")
 
-history_summary = "\n".join(history_data[:10]) # Last 10 sessions for context
-current_sess = "None"
-if st.session_state.get('current_session_id'):
-    current_sess = f"ID: {st.session_state['current_session_id']} active"
+history_summary = "\n".join(history_data[:10])
+current_sess = f"ID: {st.session_state['current_session_id']} active" if st.session_state.get('current_session_id') else "None"
 
 context = {
     "history_summary": history_summary,
+    "deep_analytics": "\n".join(deep_history),
     "current_session": current_sess,
     "thresholds": f"{st.session_state.get('settings_config', {}).get('focused_threshold', 70)}/{st.session_state.get('settings_config', {}).get('distracted_threshold', 40)}"
 }
@@ -55,10 +64,8 @@ with st.sidebar:
         avg_focus = sum(s.avg_engagement for s in sessions) / len(sessions)
         st.metric("30-Day Avg Focus", f"{avg_focus:.0f}%")
         
-        # Replacing st.bar_chart with Plotly to avoid Python 3.14 Altair crash
-        progress_df = pd.DataFrame([s.avg_engagement for s in sessions], columns=["Focus %"])
-        fig = px.bar(x=range(len(progress_df)), y=progress_df["Focus %"], 
-                     labels={'x': 'Sessions', 'y': 'Focus %'}, height=200)
+        progress_df = pd.DataFrame([s.avg_engagement for s in reversed(sessions)], columns=["Focus %"])
+        fig = px.line(progress_df, y="Focus %", height=200, markers=True)
         fig.update_layout(template="plotly_dark", margin=dict(l=0,r=0,t=0,b=0),
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -73,7 +80,7 @@ with st.sidebar:
 # ─── Suggested Questions ────────────────────────────────────────────────────
 st.write("Suggested Topics:")
 q_cols = st.columns(3)
-suggestions = ["Analyze focus patterns", "Actionable focus tips", "Improve concentration"]
+suggestions = ["My focus patterns", " पोस्टरल थकान (Postural fatigue)?", "Improve concentration"]
 for i, sugg in enumerate(suggestions):
     if q_cols[i].button(sugg, use_container_width=True):
         st.session_state.user_query = sugg
@@ -86,17 +93,15 @@ for msg in st.session_state.chat_history:
         st.markdown(msg["text"])
 
 user_input = st.chat_input("Ask about your focus patterns...")
-if st.session_state.get("user_query"): # From suggestions
+if st.session_state.get("user_query"):
     user_input = st.session_state.user_query
     del st.session_state.user_query
 
 if user_input:
-    # Append user msg
     st.session_state.chat_history.append({"text": user_input, "is_user": True, "time": datetime.now()})
     with chat_container.chat_message("user", avatar="🧑‍🎓"):
         st.markdown(user_input)
     
-    # Generate bot msg
     with chat_container.chat_message("assistant", avatar="🤖"):
         with st.spinner("AI Coach Thinking..."):
             api_key = st.session_state.get("settings_config", {}).get("gemini_api_key", "")
@@ -111,21 +116,21 @@ if st.session_state.chat_history:
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
-        pdf.cell(40, 10, f"{app_name} AI Coach - Chat Report")
-        pdf.ln(10)
+        pdf.cell(0, 10, f"{app_name} AI Coach - Chat Report", ln=True)
+        pdf.ln(5)
         pdf.set_font("Arial", size=10)
-        pdf.cell(40, 10, f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        pdf.ln(20)
+        pdf.cell(0, 10, f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
+        pdf.ln(10)
         
         for msg in st.session_state.chat_history:
             role = "STUDENT" if msg["is_user"] else "COACH"
             pdf.set_font("Arial", 'B', 11)
             pdf.multi_cell(0, 10, f"{role}:")
             pdf.set_font("Arial", size=10)
-            pdf.multi_cell(0, 10, msg["text"])
+            pdf.multi_cell(0, 8, msg.get("text", "").encode('latin-1', 'replace').decode('latin-1'))
             pdf.ln(5)
             
-        pdf_bytes = pdf.output()
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
         st.download_button("📥 Download Report", pdf_bytes, "ai_coach_report.pdf", "application/pdf")
 
 db.close()

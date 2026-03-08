@@ -394,6 +394,8 @@ with col_controls:
 
                         st.session_state['current_session_id'] = sid
                         st.session_state['session_start_ts'] = time.time()
+                        st.session_state['focus_points'] = 0
+                        st.session_state['focus_streak'] = 0
                         st.session_state['live_stats'] = {
                             'scores': [], 'timestamps': [],
                             'distractions': 0, 'gaze_scores': [],
@@ -609,8 +611,38 @@ with col_controls:
             avg_score = sum(recent) / len(recent)
 
             score_color = "#00E676" if current_score >= 70 else ("#FFD600" if current_score >= 40 else "#FF5252")
+            
+            # --- Gamification Update ---
+            if current_score >= 80:
+                st.session_state['focus_streak'] = st.session_state.get('focus_streak', 0) + 1
+                st.session_state['focus_points'] = st.session_state.get('focus_points', 0) + (10 if st.session_state['focus_streak'] > 10 else 5)
+            else:
+                st.session_state['focus_streak'] = 0
+
+            # Mood & Streak Display
+            mood_val = latest.get('sentiment', 'Neutral')
+            mood_icon = "😊" if "Smiling" in mood_val else "😐" if "Focused" in mood_val else "😴" if "Sleepy" in mood_val else "🥱"
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown(f"""
+                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:10px;text-align:center;border:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:0.75rem;color:#9E9E9E;">Current Mood</div>
+                    <div style="font-size:1.1rem;font-weight:700;">{mood_icon} {mood_val}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_b:
+                streak = st.session_state.get('focus_streak', 0)
+                streak_clr = "#00E676" if streak > 20 else "#FFD700" if streak > 5 else "#9E9E9E"
+                st.markdown(f"""
+                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:10px;text-align:center;border:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:0.75rem;color:#9E9E9E;">Focus Streak</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:{streak_clr};">🔥 {streak}x</div>
+                </div>
+                """, unsafe_allow_html=True)
+
             st.markdown(f"""
-            <div style="text-align:center;margin-bottom:1rem;">
+            <div style="text-align:center;margin:1rem 0;">
                 <div style="font-size:3.5rem;font-weight:900;color:{score_color};
                     text-shadow:0 0 20px {score_color}44;
                     font-family:'JetBrains Mono',monospace;">
@@ -619,6 +651,7 @@ with col_controls:
                 <div style="color:#9E9E9E;font-size:0.85rem;">Current Engagement</div>
             </div>
             """, unsafe_allow_html=True)
+
 
             m1, m2 = st.columns(2)
             with m1:

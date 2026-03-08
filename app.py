@@ -31,13 +31,8 @@ try:
 except Exception as e:
     st.error(f"Database initialization failed: {e}")
 
-# ─── Troll Check ──────────────────────────────────────────────────────────────
-# Check query params for the unlock signal
-if st.query_params.get("troll") == "caught":
-    st.session_state.troll_caught = True
-    # Clear the query param so it doesn't linger
-    st.query_params.clear()
-    st.switch_page("pages/0_Home.py")
+
+
 
 # ─── Troll Button Mechanic ────────────────────────────────────────────────────
 if not st.session_state.get('troll_caught', False):
@@ -53,20 +48,22 @@ if not st.session_state.get('troll_caught', False):
     </div>
     """, unsafe_allow_html=True)
 
-    # The Bouncing Button Component
-    # We use window.parent.location.search to pass the 'caught' state back to Streamlit
+    # ── Troll animation + a hidden counter stored via a form ──────────────────
+    # We use a Streamlit form with a checkbox trick to detect the click,
+    # because iframe JS cannot reliably reach parent on Streamlit Cloud.
+    
     troll_button_html = """
-    <div id="troll-container" style="height: 450px; position: relative; border: 2px dashed rgba(255,107,53,0.3); border-radius: 20px; overflow: hidden; background: rgba(255,107,53,0.05); cursor: crosshair;">
+    <div id="troll-container" style="height: 400px; position: relative; border: 2px dashed rgba(255,107,53,0.3); border-radius: 20px; overflow: hidden; background: rgba(255,107,53,0.05); cursor: crosshair;">
         <button id="troll-btn" style="
-            position: absolute; 
-            padding: 16px 32px; 
-            font-size: 1.1rem; 
-            font-weight: bold; 
-            color: white; 
-            background: linear-gradient(135deg, #FF6B35, #FFD700); 
-            border: none; 
-            border-radius: 50px; 
-            cursor: pointer; 
+            position: absolute;
+            padding: 16px 32px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #FF6B35, #FFD700);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
             box-shadow: 0 8px 20px rgba(255,107,53,0.4);
             left: 50%;
             top: 50%;
@@ -75,47 +72,66 @@ if not st.session_state.get('troll_caught', False):
             white-space: nowrap;
             user-select: none;
         ">
-            🚀 ENTER FOCUS FLOW
+            🚀 CLICK ME TO ENTER
         </button>
+        <div id="caught-msg" style="display:none; text-align:center; padding-top:160px;">
+            <div style="font-size:3rem;">🎉</div>
+            <p style="color:#FFD700; font-size:1.3rem; font-weight:bold;">You caught it! Now click the button below!</p>
+        </div>
     </div>
 
     <script>
         const btn = document.getElementById('troll-btn');
         const container = document.getElementById('troll-container');
+        const caughtMsg = document.getElementById('caught-msg');
         let moveCount = 0;
-        const maxMoves = 12; // Let them win eventually
+        const maxMoves = 10;
 
         function moveButton() {
             if (moveCount < maxMoves) {
-                const maxX = container.clientWidth - btn.clientWidth - 60;
-                const maxY = container.clientHeight - btn.clientHeight - 60;
-                
-                const newX = Math.max(30, Math.random() * maxX + 30);
-                const newY = Math.max(30, Math.random() * maxY + 30);
-                
+                const rect = container.getBoundingClientRect();
+                const btnW = btn.offsetWidth;
+                const btnH = btn.offsetHeight;
+                const maxX = container.clientWidth  - btnW - 20;
+                const maxY = container.clientHeight - btnH - 20;
+                const newX = Math.max(10, Math.random() * maxX);
+                const newY = Math.max(10, Math.random() * maxY);
                 btn.style.left = newX + 'px';
-                btn.style.top = newY + 'px';
+                btn.style.top  = newY + 'px';
                 btn.style.transform = 'none';
-                
+                btn.style.transitionDuration = Math.max(0.05, 0.18 - moveCount * 0.015) + 's';
                 moveCount++;
-                
-                // Make it faster each time
-                btn.style.transitionDuration = (0.2 - (moveCount * 0.01)) + 's';
             }
         }
 
         btn.addEventListener('mouseover', moveButton);
-        btn.addEventListener('mousedown', moveButton); // Double troll
+        btn.addEventListener('mousedown', moveButton);
 
-        btn.addEventListener('click', () => {
-            // Success! Trigger Streamlit reload via URL param
-            window.parent.location.href = window.parent.location.origin + window.parent.location.pathname + "?troll=caught";
+        btn.addEventListener('click', function() {
+            if (moveCount >= maxMoves) {
+                // They caught it — hide the button, show success message
+                btn.style.display = 'none';
+                caughtMsg.style.display = 'block';
+            } else {
+                moveButton();
+            }
         });
     </script>
     """
-    
-    components.html(troll_button_html, height=500)
+
+    components.html(troll_button_html, height=430)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Native Streamlit button — ALWAYS works on both localhost & cloud ───────
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        if st.button("✅ I Caught It — Enter Focus Flow!", type="primary", use_container_width=True):
+            st.session_state.troll_caught = True
+            st.switch_page("pages/0_Home.py")
+
     st.stop()
+
 
 # ─── Authenticated Home (Bypassed but Troll-Locked) ───────────────────────────
 
