@@ -527,11 +527,22 @@ with col_controls:
                         # Avoid spamming errors in the UI; just skip this log cycle
                         st.session_state["last_log_ts"] = now
 
-            # Troll / Nudge check logic (updates state)
-            if st.session_state.get('distraction_start_time'):
-                dist_secs = time.time() - st.session_state['distraction_start_time']
+            # ─── Troll / Nudge check — fires for ANY score < 90% ─────────────
+            # Track how long the score has been below the "perfect" line
+            now_ts = time.time()
+            if score < 90:
+                # Start timer if not already running
+                if st.session_state.get('nudge_start_time') is None:
+                    st.session_state['nudge_start_time'] = now_ts
+                nudge_secs = now_ts - st.session_state['nudge_start_time']
+            else:
+                # Reset timer when focus is excellent
+                st.session_state['nudge_start_time'] = None
+                nudge_secs = 0.0
+
+            if nudge_secs > 0:
                 troll_result = check_and_trigger(
-                    dist_secs,
+                    nudge_secs,
                     engagement_score=score,
                     sensitivity=st.session_state.get('nudge_sensitivity', 'Medium'),
                     troll_mode=st.session_state.get('troll_mode', True),
@@ -539,7 +550,8 @@ with col_controls:
                 )
                 if troll_result['should_trigger'] and troll_result['html']:
                     st.session_state['current_troll_html'] = troll_result['html']
-                    st.session_state['troll_expire_at'] = time.time() + 15
+                    st.session_state['troll_expire_at'] = now_ts + 15
+
 
             # High Visibility Warning for Low Engagement
             if score < 40:

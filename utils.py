@@ -530,6 +530,8 @@ def init_session_defaults():
         "run_calibration": False,
         # Debug mode
         "debug_mode": False,
+        # Nudge timer (fires at any score < 90%)
+        "nudge_start_time": None,
     }
     # Consolidation for legacy pages
     if "settings_config" not in st.session_state:

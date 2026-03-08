@@ -22,13 +22,28 @@ SNARKY_MESSAGES = [
     "Legend says focused students get better grades... 🧙‍♂️",
 ]
 
-COOLDOWN_SECONDS = 3  # 3 seconds between active trolls
+COOLDOWN_SECONDS = 20  # minimum gap between any nudge
 
 SENSITIVITY_MAP = {
-    "Low": 180,     # 3 minutes
-    "Medium": 120,  # 2 minutes
-    "High": 60,     # 1 minute
+    "Low":    {"high": 300, "moderate": 240, "drift": 180, "deep": 60},   # longer waits
+    "Medium": {"high": 180, "moderate": 120, "drift": 60,  "deep": 30},   # default
+    "High":   {"high": 60,  "moderate": 40,  "drift": 20,  "deep": 10},   # aggressive
 }
+
+# Nudge messages by focus tier
+HIGH_FOCUS_NUDGES = [
+    "Almost perfect focus — keep it up! 💪",
+    "You’re at 60%+ but let’s push for 100! 🎯",
+    "Good effort — just sharpen that focus a little more 🔍",
+    "You’re close to deep focus zone. One more push! ⚡",
+]
+
+MODERATE_FOCUS_NUDGES = [
+    "Drifting a bit — reel it back in 🎣",
+    "You had good momentum… don’t lose it now 💨",
+    "Your focus is slipping. Tighten up! 🎯",
+    "Halfway there, halfway gone. Choose your side 🤔",
+]
 
 def get_troll_html(troll_type: str) -> str:
     """Return HTML/JS string for the given troll effect."""
@@ -42,13 +57,18 @@ def get_troll_html(troll_type: str) -> str:
         return _red_border_html()
     return ""
 
-def check_and_trigger(distraction_seconds: float, 
+def check_and_trigger(distraction_seconds: float,
                       engagement_score: Optional[float] = None,
                       sensitivity: str = "Medium",
-                      troll_mode: bool = True, 
+                      troll_mode: bool = True,
                       nudge_only: bool = False) -> Dict[str, Any]:
     """
-    Check if a troll should be triggered based on distraction duration OR low engagement.
+    4-tier nudge system:
+      score < 35%              -> Distracted   -> full troll OR snarky message immediately
+      35% <= score < 56%       -> Drifting     -> snarky nudge after short delay
+      56% <= score < 76%       -> Moderate     -> gentle nudge after medium delay
+      76% <= score < 90%       -> High focus   -> soft encouragement after long delay
+      >= 90%                   -> Never trigger
     """
     result: Dict[str, Any] = {
         "should_trigger": False, "troll_type": None, "html": "", "message": ""
@@ -57,19 +77,35 @@ def check_and_trigger(distraction_seconds: float,
     if not troll_mode:
         return result
 
-    # ─── Threshold Logic ───
-    threshold = SENSITIVITY_MAP.get(sensitivity, 120)
-    score_trigger = False
-    
-    if engagement_score is not None:
-        if engagement_score < 45 and distraction_seconds > 2:
-            score_trigger = True
-        elif engagement_score < 65 and distraction_seconds > (threshold / 3):
-            score_trigger = True
+    score = engagement_score if engagement_score is not None else 100.0
+    thresholds = SENSITIVITY_MAP.get(sensitivity, SENSITIVITY_MAP["Medium"])
 
-    time_trigger = distraction_seconds >= threshold
+    # Determine which tier and required distraction time
+    if score >= 90:
+        # Deep focus — never nudge
+        return result
+    elif score >= 76:
+        # High focus — soft reminder after long delay
+        required = thresholds["high"]
+        nudge_pool = HIGH_FOCUS_NUDGES
+        force_toast = True  # always just a soft toast at this tier
+    elif score >= 56:
+        # Moderate focus — friendly nudge
+        required = thresholds["moderate"]
+        nudge_pool = MODERATE_FOCUS_NUDGES
+        force_toast = True
+    elif score >= 35:
+        # Drifting — proper snarky nudge
+        required = thresholds["drift"]
+        nudge_pool = SNARKY_MESSAGES
+        force_toast = nudge_only
+    else:
+        # Distracted — full troll treatment
+        required = thresholds["deep"]
+        nudge_pool = SNARKY_MESSAGES
+        force_toast = nudge_only
 
-    if not (time_trigger or score_trigger):
+    if distraction_seconds < required:
         return result
 
     # Check cooldown
@@ -82,8 +118,8 @@ def check_and_trigger(distraction_seconds: float,
     result["should_trigger"] = True
     st.session_state["last_troll_time"] = now
 
-    if nudge_only:
-        msg = random.choice(SNARKY_MESSAGES)
+    if force_toast:
+        msg = random.choice(nudge_pool)
         result["troll_type"] = "snarky_toast"
         result["message"] = msg
         result["html"] = _snarky_toast_html(msg)
@@ -92,7 +128,7 @@ def check_and_trigger(distraction_seconds: float,
         chosen = random.choice(troll_types)
         result["troll_type"] = chosen
         if chosen == "snarky_toast":
-            msg = random.choice(SNARKY_MESSAGES)
+            msg = random.choice(nudge_pool)
             result["message"] = msg
             result["html"] = _snarky_toast_html(msg)
         else:
