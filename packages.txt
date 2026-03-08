@@ -7,3 +7,7 @@ libavutil-dev
 libswscale-dev
 libswresample-dev
 libavfilter-dev
+zlib1g-dev
+gfortran
+libopenblas-dev
+liblapack-dev
