@@ -1,7 +1,7 @@
 streamlit==1.42.0
 streamlit-authenticator==0.4.1
 streamlit-webrtc==0.47.9
-av==12.3.0
+av>=12.0.0
 opencv-python-headless==4.10.0.84
 mediapipe==0.10.30
 numpy>=2.1.0

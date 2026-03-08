@@ -89,36 +89,47 @@ if HAS_WEBRTC:
         """WebRTC video processor for real-time engagement detection."""
 
         def __init__(self):
-            self.processor = CVProcessor()
+            # Pick up per-user calibration from session state if available
+            calib = st.session_state.get("user_calibration", {})
+            self.processor = CVProcessor(user_calibration=calib)
             self.latest_result = {}
             self.lock = threading.Lock()
             self._frame_count = 0
-            self._log_interval = 30  # Log ~every 1 second at 30fps
 
         def recv(self, frame):
             img = frame.to_ndarray(format="bgr24")
             try:
                 results = self.processor.process_frame(img)
-            except Exception:
-                results = {'annotated_frame': img, 'engagement_score': 0,
-                           'has_face': False, 'is_distracted': False, 'is_spoof': False}
+            except Exception as e:
+                results = {
+                    'annotated_frame': img, 'engagement_score': 5,
+                    'has_face': False, 'is_distracted': False, 'is_spoof': False,
+                    'conditions': {'ok': True, 'warnings': []},
+                    'error': str(e),
+                }
 
             with self.lock:
                 self.latest_result = results
                 self._frame_count += 1
 
             annotated = results.get('annotated_frame', img)
+            # Overlay condition warnings directly on the WebRTC frame
+            conditions = results.get('conditions', {})
+            if not conditions.get('ok', True):
+                cv2.putText(annotated, "⚠ CHECK CONDITIONS",
+                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
             return av.VideoFrame.from_ndarray(annotated, format="bgr24")
 
         def get_latest(self):
             with self.lock:
                 return dict(self.latest_result)
 
-    # STUN servers for WebRTC connectivity
+    # STUN servers for WebRTC connectivity (Google public STUN + fallbacks)
     RTC_CONFIG = RTCConfiguration({
         "iceServers": [
             {"urls": ["stun:stun.l.google.com:19302"]},
             {"urls": ["stun:stun1.l.google.com:19302"]},
+            {"urls": ["stun:stun2.l.google.com:19302"]},
         ]
     })
 
@@ -204,7 +215,14 @@ with col_feed:
             ```
             """)
         else:
-            # WebRTC streamer
+            # WebRTC streamer — auto-start, shows a clear START button
+            st.markdown("""
+            <div style="background: rgba(108,99,255,0.08); border: 1px solid rgba(108,99,255,0.2);
+                border-radius: 10px; padding: 0.7rem 1rem; margin-bottom: 0.5rem; font-size:0.88rem; color:#9E9E9E;">
+                📷 Click <b style="color:#E0E0E0;">START</b> below to allow camera access and begin live analysis.
+                Make sure your browser granted camera permission.
+            </div>
+            """, unsafe_allow_html=True)
             ctx = webrtc_streamer(
                 key="engagement_feed",
                 mode=WebRtcMode.SENDRECV,
@@ -212,6 +230,11 @@ with col_feed:
                 video_processor_factory=EngagementVideoProcessor,
                 media_stream_constraints={"video": True, "audio": False},
                 async_processing=True,
+                translations={
+                    "start": "▶ Start Camera",
+                    "stop": "⏹ Stop Camera",
+                    "select_device": "Choose Camera",
+                },
             )
     elif st.session_state["cam_mode"] == "Snapshot (Safe Mode)":
         # ── Snapshot Mode (Streamlit Native) ──────────────────

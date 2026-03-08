@@ -1,158 +1,240 @@
 """
-0_Home.py — Home page showing simulated engagement session (no login required).
+0_Home.py — Home page showing real session history from DB.
+Shows actual engagement data from the user's past sessions.
+If no sessions exist yet, provides a friendly first-run guide.
 """
 import streamlit as st
 import pandas as pd
-import random
-import time
-import plotly.express as px
 import plotly.graph_objects as go
-from utils import apply_theme, generate_fake_session_data, render_page_header, render_metric_card
+import plotly.express as px
+
+from utils import apply_theme, render_page_header, render_metric_card, get_current_user_id
+from database import get_db, get_user_sessions, get_session_logs, StudySession
 
 st.set_page_config(page_title="Home — Focus Flow", page_icon="🧠", layout="wide")
 apply_theme(st.session_state.get("theme", "Dark"))
 
-render_page_header("🏠 Home", "See how Focus Flow works")
+render_page_header("🏠 Home", "Your Focus Flow dashboard")
 
-# Generate fake data with unique random seed per regeneration
-if 'demo_data' not in st.session_state or 'demo_seed' not in st.session_state:
-    seed = int(time.time() * 1000) % 99999
-    st.session_state['demo_seed'] = seed
-    random.seed(seed)
-    st.session_state['demo_data'] = generate_fake_session_data(25)
+# ─── Load real sessions from DB ───────────────────────────────────────────────
+db = next(get_db(st.session_state.get("db_url")))
+try:
+    user_id = get_current_user_id(db)
+    all_sessions = get_user_sessions(db, user_id, status="completed")
+except Exception as e:
+    all_sessions = []
 
-data = st.session_state['demo_data']
+# ─── No sessions yet: First-run guide ────────────────────────────────────────
+if not all_sessions:
+    st.markdown("""
+    <div style="
+        text-align:center; padding: 3rem 2rem;
+        background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(0,210,255,0.04));
+        border: 1px solid rgba(108,99,255,0.2); border-radius: 20px; margin-bottom: 2rem;
+    ">
+        <div style="font-size: 4rem; margin-bottom: 1rem;">🧠</div>
+        <h2 style="background: linear-gradient(135deg, #6C63FF, #00D2FF);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            font-size: 2rem; margin: 0 0 0.5rem 0;">Welcome to Focus Flow!</h2>
+        <p style="color: #9E9E9E; font-size: 1.05rem; margin: 0 0 2rem 0;">
+            You haven't completed any study sessions yet.<br>
+            Head to the Dashboard, start a session, and come back here to see your real analytics!
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Metric cards
+    # Feature highlight cards
+    col1, col2, col3, col4 = st.columns(4)
+    features = [
+        ("📹", "Live Webcam", "Real-time engagement tracking via your camera"),
+        ("🧠", "AI Scoring", "EAR, gaze, head pose all computed every frame"),
+        ("🤡", "Troll Nudges", "Snarky popups when your attention drops"),
+        ("📊", "Analytics", "Full session history and engagement trends"),
+    ]
+    for col, (icon, title, desc) in zip([col1, col2, col3, col4], features):
+        with col:
+            st.markdown(f"""
+            <div style="background: rgba(108,99,255,0.08); border: 1px solid rgba(108,99,255,0.15);
+                border-radius: 14px; padding: 1.25rem; text-align: center; height: 140px;
+                display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size: 2rem; margin-bottom: 0.4rem;">{icon}</div>
+                <div style="color: #E0E0E0; font-weight: 700; font-size: 0.95rem;">{title}</div>
+                <div style="color: #9E9E9E; font-size: 0.78rem; margin-top: 0.3rem;">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_start, _ = st.columns([1, 2])
+    with col_start:
+        if st.button("📹 Go to Dashboard & Start a Session", type="primary", use_container_width=True):
+            st.switch_page("pages/1_Dashboard.py")
+
+    db.close()
+    st.stop()
+
+# ─── Sessions exist — show real stats ─────────────────────────────────────────
+
+# Pick session to view — default to latest
+session_names = [f"#{s.id} — {s.name} ({s.tag})" for s in all_sessions]
+selected_label = st.selectbox("📂 Select a session to view", session_names, index=0)
+selected_idx   = session_names.index(selected_label)
+selected       = all_sessions[selected_idx]
+
+# ── Metric Cards ──────────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
+dur_s = selected.duration_seconds or 0
+dur_str = f"{dur_s // 60}m {dur_s % 60}s" if dur_s >= 60 else f"{dur_s}s"
+
 with col1:
-    render_metric_card("Session Duration", f"{data['duration_minutes']}m", "⏱️")
+    render_metric_card("Duration", dur_str, "⏱️")
 with col2:
-    render_metric_card("Avg Engagement", f"{data['avg_engagement']}%", "📊")
+    render_metric_card("Avg Engagement", f"{selected.avg_engagement or 0:.1f}%", "📊")
 with col3:
-    render_metric_card("Peak Focus", f"{data['peak_engagement']}%", "🎯")
+    render_metric_card("Peak Focus", f"{selected.peak_engagement or 0:.1f}%", "🎯")
 with col4:
-    render_metric_card("Distractions", f"{data['total_distractions']}", "⚡")
+    render_metric_card("Distractions", str(selected.total_distractions or 0), "⚡")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Engagement timeline
-df = pd.DataFrame({
-    'Time': data['timestamps'],
-    'Engagement': data['engagement_scores'],
-    'Distracted': data['is_distracted'],
-})
+# ── Load engagement logs for selected session ──────────────────────────────────
+logs = get_session_logs(db, selected.id)
 
+if not logs:
+    st.info("No engagement log data for this session yet. Logs are saved every 2 seconds during an active session.")
+    db.close()
+    st.stop()
+
+# Build dataframe from logs
+import pandas as pd
+log_df = pd.DataFrame([{
+    "Time":       log.timestamp,
+    "Engagement": log.engagement_score or 0.0,
+    "EAR":        log.ear_value or 0.0,
+    "Gaze":       log.gaze_score or 0.0,
+    "Head Yaw":   log.head_yaw or 0.0,
+    "Head Pitch": log.head_pitch or 0.0,
+    "Distracted": bool(log.is_distracted),
+} for log in logs])
+
+log_df["Time"] = pd.to_datetime(log_df["Time"])
+
+# ── Charts ────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3 = st.tabs(["📈 Engagement Timeline", "👁️ EAR / Drowsiness", "🎯 Gaze & Posture"])
 
 with tab1:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df['Time'], y=df['Engagement'],
-        mode='lines', name='Engagement',
-        line=dict(color='#FF4B4B', width=2),
-        fill='tozeroy', fillcolor='rgba(255,75,75,0.1)',
+        x=log_df["Time"], y=log_df["Engagement"],
+        mode="lines", name="Engagement",
+        line=dict(color="#6C63FF", width=2),
+        fill="tozeroy", fillcolor="rgba(108,99,255,0.08)",
     ))
 
-    # Distraction markers
-    dist_df = df[df['Distracted'] == True]
+    dist_df = log_df[log_df["Distracted"]]
     if not dist_df.empty:
         fig.add_trace(go.Scatter(
-            x=dist_df['Time'], y=dist_df['Engagement'],
-            mode='markers', name='Distraction Event',
-            marker=dict(color='#FFB020', size=8, symbol='x'),
+            x=dist_df["Time"], y=dist_df["Engagement"],
+            mode="markers", name="Distraction",
+            marker=dict(color="#FFB020", size=8, symbol="x"),
         ))
 
-    fig.add_hline(y=60, line_dash="dot", line_color="#00D26A",
-                  annotation_text="Focus Threshold (60%)")
+    fig.add_hline(y=80, line_dash="dot", line_color="#00E676", annotation_text="Focused (80%)")
+    fig.add_hline(y=40, line_dash="dot", line_color="#FF5252", annotation_text="Distracted (40%)")
     fig.update_layout(
-        title="Engagement Score Over Time",
+        title=f"Session #{selected.id} — {selected.name}",
         xaxis_title="Time", yaxis_title="Engagement %",
         yaxis=dict(range=[0, 105]),
         template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(26,29,39,0.5)",
         height=400,
     )
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
-    ear_df = pd.DataFrame({
-        'Time': data['timestamps'],
-        'EAR': data['ear_values'],
-    })
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(
-        x=ear_df['Time'], y=ear_df['EAR'],
-        mode='lines', name='Eye Aspect Ratio',
-        line=dict(color='#4BAFFF', width=2),
+        x=log_df["Time"], y=log_df["EAR"],
+        mode="lines", name="Eye Aspect Ratio",
+        line=dict(color="#4BAFFF", width=2),
     ))
-    fig2.add_hline(y=0.25, line_dash="dash", line_color="#FF4B4B",
-                   annotation_text="Drowsy Threshold (0.25)")
+    fig2.add_hline(y=0.28, line_dash="dot",  line_color="#00E676",  annotation_text="Alert (0.28)")
+    fig2.add_hline(y=0.22, line_dash="dash", line_color="#FFD600",  annotation_text="Drowsy (0.22)")
+    fig2.add_hline(y=0.18, line_dash="dash", line_color="#FF5252",  annotation_text="Eyes Closed (0.18)")
     fig2.update_layout(
-        title="Eye Aspect Ratio (Drowsiness Tracking)",
+        title="Eye Aspect Ratio — Drowsiness Tracking",
         xaxis_title="Time", yaxis_title="EAR",
-        template="plotly_dark", height=400,
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(26,29,39,0.5)",
+        height=400,
     )
     st.plotly_chart(fig2, use_container_width=True)
 
 with tab3:
-    pose_df = pd.DataFrame({
-        'Time': data['timestamps'],
-        'Gaze Score': data['gaze_scores'],
-        'Head Yaw': data['head_yaw'],
-        'Head Pitch': data['head_pitch'],
-    })
     col_a, col_b = st.columns(2)
     with col_a:
-        fig3 = px.line(pose_df, x='Time', y='Gaze Score',
-                       title="Gaze Centrality Score")
-        fig3.update_layout(template="plotly_dark", height=350)
+        fig3 = px.line(log_df, x="Time", y="Gaze", title="Gaze Score")
+        fig3.update_layout(template="plotly_dark", height=350,
+                           paper_bgcolor="rgba(0,0,0,0)",
+                           plot_bgcolor="rgba(26,29,39,0.5)")
         st.plotly_chart(fig3, use_container_width=True)
     with col_b:
         fig4 = go.Figure()
-        fig4.add_trace(go.Scatter(x=pose_df['Time'], y=pose_df['Head Yaw'],
-                                   mode='lines', name='Yaw', line=dict(color='#FFB020')))
-        fig4.add_trace(go.Scatter(x=pose_df['Time'], y=pose_df['Head Pitch'],
-                                   mode='lines', name='Pitch', line=dict(color='#00D26A')))
-        fig4.add_hline(y=30, line_dash="dot", line_color="red", annotation_text="Distraction Threshold")
-        fig4.add_hline(y=-30, line_dash="dot", line_color="red")
-        fig4.update_layout(title="Head Pose Angles", template="plotly_dark", height=350)
+        fig4.add_trace(go.Scatter(x=log_df["Time"], y=log_df["Head Yaw"],
+                                   mode="lines", name="Yaw", line=dict(color="#FFB020")))
+        fig4.add_trace(go.Scatter(x=log_df["Time"], y=log_df["Head Pitch"],
+                                   mode="lines", name="Pitch", line=dict(color="#00D26A")))
+        fig4.add_hline(y=30,  line_dash="dot", line_color="red", annotation_text="Distraction Threshold")
+        fig4.add_hline(y=-20, line_dash="dot", line_color="red")
+        fig4.update_layout(title="Head Pose Angles", template="plotly_dark", height=350,
+                           paper_bgcolor="rgba(0,0,0,0)",
+                           plot_bgcolor="rgba(26,29,39,0.5)")
         st.plotly_chart(fig4, use_container_width=True)
 
-# Focus distribution
+# ── Focus Distribution Pie ─────────────────────────────────────────────────────
 st.subheader("📊 Focus Distribution")
-focused_time = sum(1 for d in data['is_distracted'] if not d)
-distracted_time = sum(1 for d in data['is_distracted'] if d)
-pie_df = pd.DataFrame({
-    'State': ['Focused', 'Distracted'],
-    'Count': [focused_time, distracted_time],
-})
-fig5 = px.pie(pie_df, values='Count', names='State',
-              color_discrete_sequence=['#00D26A', '#FF4B4B'],
-              hole=0.4)
-fig5.update_layout(template="plotly_dark", height=350)
+focused_count    = int((~log_df["Distracted"]).sum())
+distracted_count = int(log_df["Distracted"].sum())
+pie_df = pd.DataFrame({"State": ["Focused", "Distracted"], "Count": [focused_count, distracted_count]})
+fig5 = px.pie(pie_df, values="Count", names="State",
+              color_discrete_sequence=["#00D26A", "#FF4B4B"], hole=0.4)
+fig5.update_layout(template="plotly_dark", height=350, paper_bgcolor="rgba(0,0,0,0)")
+
 col_pie, col_cta = st.columns([1, 1])
 with col_pie:
     st.plotly_chart(fig5, use_container_width=True)
 with col_cta:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("""
-    ### 🚀 Start Tracking Live!
-
-    Go to the **Live Dashboard** in the sidebar to start tracking your real study engagement with your webcam!
-
-    The live version includes:
-    - ✅ Real-time webcam analysis
-    - ✅ AI-powered session reports
-    - ✅ Personalized ML model training
-    - ✅ Fun troll nudges when distracted
-    - ✅ PDF & CSV exports
+    st.markdown(f"""
+    ### 📈 Session Summary
+    **{selected.name}** · Tag: `{selected.tag}`
+    
+    - 🕐 Duration: **{dur_str}**
+    - 📊 Average Engagement: **{selected.avg_engagement or 0:.1f}%**
+    - 🏆 Peak Engagement: **{selected.peak_engagement or 0:.1f}%**
+    - ⚡ Distractions: **{selected.total_distractions or 0}**
+    - 🔢 Log entries: **{len(logs)}**
     """)
+    if st.button("📹 Start New Session", type="primary", use_container_width=True):
+        st.switch_page("pages/1_Dashboard.py")
 
-# Regenerate button
-st.markdown("---")
-if st.button("🔄 Regenerate Data", use_container_width=True):
-    seed = int(time.time() * 1000) % 99999
-    st.session_state['demo_seed'] = seed
-    random.seed(seed)
-    st.session_state['demo_data'] = generate_fake_session_data(25)
-    st.rerun()
+# ─── All sessions summary at bottom ───────────────────────────────────────────
+st.divider()
+st.subheader(f"📋 All Sessions ({len(all_sessions)} total)")
+summary_rows = []
+for s in all_sessions:
+    ds = s.duration_seconds or 0
+    summary_rows.append({
+        "ID":          f"#{s.id}",
+        "Name":        s.name,
+        "Tag":         s.tag,
+        "Duration":    f"{ds // 60}m {ds % 60}s",
+        "Avg Score":   f"{s.avg_engagement or 0:.1f}%",
+        "Peak Score":  f"{s.peak_engagement or 0:.1f}%",
+        "Distractions": s.total_distractions or 0,
+    })
+st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+db.close()

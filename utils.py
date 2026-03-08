@@ -525,6 +525,11 @@ def init_session_defaults():
         "mood_score": None,
         "_settings_loaded": False,
         "last_log_ts": 0,
+        # CV calibration data
+        "user_calibration": None,
+        "run_calibration": False,
+        # Debug mode
+        "debug_mode": False,
     }
     # Consolidation for legacy pages
     if "settings_config" not in st.session_state:
