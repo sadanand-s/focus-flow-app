@@ -46,8 +46,8 @@ elif settings_obj.extra_config:
 
 # ─── Layout Tabs ────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🎨 Identity & Layout", 
-    "🕒 Session & Behavior", 
+    "🎨 Identity & Layout",
+    "🕒 Session & Behavior",
     "🔔 Alerts & Language",
     "🎧 Ambient",
     "🔒 Security & AI",
@@ -61,7 +61,7 @@ with tab1:
         st.subheader("🖼️ App Identity")
         new_app_name = st.text_input("Custom App Name", value=st.session_state.settings_config.get("app_name", "Focus Flow"))
         accent_color = st.color_picker("Global Accent Color", value=st.session_state.settings_config.get("accent_color", "#6C63FF"))
-        
+
         avatar_file = st.file_uploader("Profile Avatar", type=['png', 'jpg', 'jpeg'])
         if avatar_file:
             bytes_data = avatar_file.getvalue()
@@ -76,7 +76,7 @@ with tab1:
         w_ear = st.toggle("Eye Alertness Gauge", value=st.session_state.settings_config.get("widgets", {}).get("ear", True))
         w_pos = st.toggle("Posture/Yaw Score", value=st.session_state.settings_config.get("widgets", {}).get("posture", True))
         w_tim = st.toggle("Engagement Timeline", value=st.session_state.settings_config.get("widgets", {}).get("timeline", True))
-        
+
         layout_mode = st.radio("Layout Density", ["Spacious", "Compact"], index=0 if st.session_state.settings_config.get("layout") == "Spacious" else 1)
 
 # ─── Tab 2: Session & Behavior ──────────────────────────────────────────────
@@ -86,17 +86,17 @@ with tab2:
         st.subheader("🎯 Engagement Thresholds")
         f_thresh = st.slider("Focused Threshold (%)", 50, 95, value=st.session_state.settings_config.get("focused_threshold", 70))
         d_thresh = st.slider("Distracted Threshold (%)", 10, 50, value=st.session_state.settings_config.get("distracted_threshold", 40))
-        
+
         st.divider()
         st.subheader("⏳ Session Rules")
         auto_end = st.number_input("Auto-end session after N minutes of inactivity", 1, 60, value=st.session_state.settings_config.get("auto_end_minutes", 10))
-        
+
     with col_b:
         st.subheader("🍅 Pomodoro Mode")
         pomo_on = st.toggle("Enable Pomodoro Intervals", value=st.session_state.settings_config.get("pomodoro_mode", False))
         if pomo_on:
             st.info("Sessions will auto-split into 25-min work / 5-min break blocks.")
-        
+
         st.divider()
         st.subheader("🏷️ Custom Tags")
         st.write("Tag your sessions for better analytics (Coming soon)")
@@ -108,7 +108,7 @@ with tab3:
         st.subheader("📢 Troll System")
         st.session_state.troll_mode = st.toggle("Enable Troll Mode", value=st.session_state.troll_mode, help="Triggers snarky popups or emoji storms if your focus drops.")
         st.session_state.nudge_only = st.toggle("Nudge Only (Subtle toasts only)", value=st.session_state.nudge_only)
-        
+
         n_delay = st.selectbox("Trigger delay (consecutive distraction)", [1, 2, 5], index=1)
         st.session_state.settings_config["n_delay"] = n_delay
         nudge_sensitivity = st.selectbox(
@@ -116,7 +116,7 @@ with tab3:
             ["Low", "Medium", "High"],
             index=["Low", "Medium", "High"].index(st.session_state.get("nudge_sensitivity", "Medium")),
         )
-        
+
         custom_msg = st.text_area("Custom Nudge Message", value=st.session_state.settings_config.get("custom_nudge_msg", "Stay focused! You got this."))
 
     with col_y:
@@ -129,14 +129,14 @@ with tab4:
     st.write("Choose a background sound for your sessions.")
     ambient_opt = st.selectbox("Sound Type", ["None", "Lo-fi", "Rain", "White Noise", "Forest"], index=["None", "Lo-fi", "Rain", "White Noise", "Forest"].index(st.session_state.settings_config.get("ambient_sound", "None")))
     ambient_vol = st.slider("Volume", 0, 100, value=st.session_state.settings_config.get("ambient_volume", 50))
-    
+
     st.info("Note: Ambient audio plays automatically during active sessions.")
 
 # ─── Tab 5: Security & AI ──────────────────────────────────────────────────
 with tab5:
     st.subheader("🔑 AI Integration")
     st.write("Configure your Google Gemini API key to enable the AI Coach and session summaries.")
-    
+
     env_key = ""
     try:
         env_key = st.secrets.get("GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
@@ -149,7 +149,7 @@ with tab5:
         use_manual = True
 
     if use_manual:
-        manual_key = st.text_input("Gemini API Key", 
+        manual_key = st.text_input("Gemini API Key",
                                   value=st.session_state.settings_config.get("gemini_api_key", ""),
                                   type="password",
                                   help="Get yours from makersuite.google.com")
@@ -164,6 +164,35 @@ with tab5:
     )
 
     st.divider()
+    st.subheader("🛠️ Developer / Debug Mode")
+    debug_mode = st.toggle(
+        "Enable Debug Mode",
+        value=st.session_state.settings_config.get("debug_mode", False),
+        help="Shows raw EAR, yaw, pitch, gaze values and score breakdown on Dashboard.",
+    )
+    st.session_state.settings_config["debug_mode"] = debug_mode
+    st.session_state["debug_mode"] = debug_mode
+    if debug_mode:
+        st.info("Debug mode ON — raw CV values appear on the Dashboard live feed.")
+
+    st.divider()
+    st.subheader("🎯 Personal Calibration")
+    st.markdown("""
+    Calibration adapts engagement scoring to **your** face and posture for maximum accuracy.
+    Run the Calibration Wizard once before your first session.
+    """)
+    if st.session_state.get("user_calibration"):
+        st.success("✅ Calibrated — Personal thresholds active")
+        if st.button("🔁 Recalibrate"):
+            st.session_state["user_calibration"] = None
+            st.rerun()
+    else:
+        st.warning("⚠️ Not yet calibrated — Using default thresholds")
+        if st.button("🎯 Run Calibration Wizard", type="primary"):
+            st.session_state["run_calibration"] = True
+            st.switch_page("pages/1_Dashboard.py")
+
+    st.divider()
     st.subheader("🛡️ Data Privacy")
     st.info("""
     - **Isolation**: All study sessions and metrics are tied to your unique user ID.
@@ -175,7 +204,7 @@ with tab5:
 with tab6:
     st.subheader("🚀 Deployment Wizard")
     d_tab1, d_tab2, d_tab3 = st.tabs(["Streamlit Cloud", "Docker", "Database Migration"])
-    
+
     with d_tab1:
         st.markdown("""
         ### Deploy to Streamlit Community Cloud (Free)
@@ -214,7 +243,6 @@ docker-compose up -d
 # ─── Save All Actions ───────────────────────────────────────────────────────
 st.divider()
 if st.button("💾 Save All Personalized Settings", use_container_width=True):
-    # Update session state config
     st.session_state.settings_config.update({
         "app_name": new_app_name,
         "accent_color": accent_color,
@@ -234,8 +262,7 @@ if st.button("💾 Save All Personalized Settings", use_container_width=True):
             "timeline": w_tim
         }
     })
-    
-    # Save to DB
+
     settings_obj.extra_config = st.session_state.settings_config
     settings_obj.troll_mode = st.session_state.troll_mode
     settings_obj.nudge_only = st.session_state.nudge_only
@@ -243,7 +270,7 @@ if st.button("💾 Save All Personalized Settings", use_container_width=True):
     settings_obj.bot_training_enabled = st.session_state.bot_training_enabled
     db.commit()
     st.session_state["_settings_loaded"] = True
-    
+
     st.success("✅ Settings saved successfully! Rerunning app...")
     time.sleep(1)
     st.rerun()

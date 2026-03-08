@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+import os
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
@@ -101,12 +102,14 @@ with col_action:
             status_placeholder.error("❌ Training failed. Please check if you have enough diverse data.")
 
     if st.button("🗑️ Reset Model to Factory Defaults", use_container_width=True):
-        if st.checkbox("I understand this will delete my personalized model weights."):
-             if os.path.exists("engagement_model.pkl"):
-                 os.remove("engagement_model.pkl")
-             st.success("Model reset! Reloading...")
-             time.sleep(1)
-             st.rerun()
+        confirmed = st.checkbox("I understand this will delete my personalized model weights.")
+        if confirmed:
+            model_path = "engagement_model.pkl"
+            if os.path.exists(model_path):
+                os.remove(model_path)
+            st.success("Model reset! Reloading...")
+            time.sleep(1)
+            st.rerun()
 
 # ─── Training History Chart ─────────────────────────────────────────────────
 st.divider()

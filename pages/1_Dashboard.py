@@ -531,6 +531,42 @@ with col_controls:
                 </style>
                 """, unsafe_allow_html=True)
 
+            # Camera condition warnings
+            conditions = latest.get("conditions", {})
+            if conditions and not conditions.get("ok", True):
+                for warn in conditions.get("warnings", []):
+                    st.warning(warn)
+
+            # ─── Debug Mode Panel ─────────────────────────────────────
+            if st.session_state.get("debug_mode", False):
+                ear_val    = latest.get("ear", 0.0)
+                yaw_val    = latest.get("yaw", 0.0)
+                pitch_val  = latest.get("pitch", 0.0)
+                gaze_val   = latest.get("gaze_score", 0.0)
+                raw_s      = latest.get("raw_score", score)
+                ema_s      = latest.get("ema_score", score)
+                bonus      = latest.get("focus_bonus", 0)
+                ear_clr    = "#00E676" if ear_val >= 0.28 else ("#FFD600" if ear_val >= 0.22 else "#FF5252")
+                yaw_clr    = "#00E676" if abs(yaw_val)   <= 30 else "#FF5252"
+                pitch_clr  = "#00E676" if -5 <= pitch_val <= 35 else "#FF5252"
+                gaze_clr   = "#00E676" if gaze_val >= 0.7 else ("#FFD600" if gaze_val >= 0.4 else "#FF5252")
+                score_clr  = "#00E676" if score >= 70 else ("#FFD600" if score >= 40 else "#FF5252")
+                st.markdown(f"""
+                <div style="background:rgba(0,0,0,0.4);border:1px solid #333;border-radius:10px;
+                    padding:0.8rem;font-family:'JetBrains Mono',monospace;font-size:0.78rem;margin-top:0.5rem;">
+                    <b style="color:#9E9E9E;">🛠️ DEBUG MODE — Raw CV Values</b><br>
+                    <span style="color:{ear_clr};">EAR: {ear_val:.3f}</span> &nbsp;
+                    <span style="color:{yaw_clr};">Yaw: {yaw_val:.1f}°</span> &nbsp;
+                    <span style="color:{pitch_clr};">Pitch: {pitch_val:.1f}°</span> &nbsp;
+                    <span style="color:{gaze_clr};">Gaze: {gaze_val:.3f}</span><br>
+                    <span style="color:#9E9E9E;">Raw: {raw_s:.1f}%</span> &nbsp;
+                    <span style="color:#9E9E9E;">EMA: {ema_s:.1f}%</span> &nbsp;
+                    <span style="color:#FFD700;">Bonus: +{bonus}</span> &nbsp;
+                    <span style="color:{score_clr};">Final: {score:.0f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+
         stats = st.session_state['live_stats']
         if stats['scores']:
             recent = stats['scores'][-15:]

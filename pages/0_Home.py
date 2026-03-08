@@ -3,6 +3,8 @@
 """
 import streamlit as st
 import pandas as pd
+import random
+import time
 import plotly.express as px
 import plotly.graph_objects as go
 from utils import apply_theme, generate_fake_session_data, render_page_header, render_metric_card
@@ -12,8 +14,11 @@ apply_theme(st.session_state.get("theme", "Dark"))
 
 render_page_header("🏠 Home", "See how Focus Flow works")
 
-# Generate fake data
-if 'demo_data' not in st.session_state:
+# Generate fake data with unique random seed per regeneration
+if 'demo_data' not in st.session_state or 'demo_seed' not in st.session_state:
+    seed = int(time.time() * 1000) % 99999
+    st.session_state['demo_seed'] = seed
+    random.seed(seed)
     st.session_state['demo_data'] = generate_fake_session_data(25)
 
 data = st.session_state['demo_data']
@@ -145,6 +150,9 @@ with col_cta:
 
 # Regenerate button
 st.markdown("---")
-if st.button("🔄 Regenerate Data"):
+if st.button("🔄 Regenerate Data", use_container_width=True):
+    seed = int(time.time() * 1000) % 99999
+    st.session_state['demo_seed'] = seed
+    random.seed(seed)
     st.session_state['demo_data'] = generate_fake_session_data(25)
     st.rerun()
