@@ -44,6 +44,9 @@ class StudySession(Base):
     spoof_detected = Column(Boolean, default=False)
     is_ground_truth = Column(Boolean, default=False)
     summary_text = Column(Text, nullable=True)
+    xp_earned = Column(Float, default=0.0)
+    mood_summary = Column(String(100), nullable=True)
+
 
     user = relationship("User", back_populates="sessions")
     logs = relationship("EngagementLog", back_populates="session", cascade="all, delete-orphan")
@@ -64,6 +67,8 @@ class EngagementLog(Base):
     engagement_score = Column(Float, default=0.0)
     is_distracted = Column(Boolean, default=False)
     is_spoof = Column(Boolean, default=False)
+    sentiment = Column(String(50), nullable=True)
+
 
     session = relationship("StudySession", back_populates="logs")
 
@@ -141,15 +146,31 @@ def init_db(engine=None):
     
     # Minor migrations for SQLite
     try:
+        # Check and migrate columns
         inspector = inspect(engine)
-        columns = [c["name"] for c in inspector.get_columns("settings")]
+        columns_sett = [c["name"] for c in inspector.get_columns("settings")]
+        columns_logs = [c["name"] for c in inspector.get_columns("engagement_logs")]
+        columns_sess = [c["name"] for c in inspector.get_columns("sessions")]
         
         with engine.connect() as conn:
-            if "profile_avatar" not in columns:
+            # Settings table
+            if "profile_avatar" not in columns_sett:
                 conn.execute(text("ALTER TABLE settings ADD COLUMN profile_avatar TEXT"))
-            if "extra_config" not in columns:
+            if "extra_config" not in columns_sett:
                 conn.execute(text("ALTER TABLE settings ADD COLUMN extra_config JSON"))
+            
+            # Engagement Logs table
+            if "sentiment" not in columns_logs:
+                conn.execute(text("ALTER TABLE engagement_logs ADD COLUMN sentiment VARCHAR(50)"))
+                
+            # Sessions table
+            if "xp_earned" not in columns_sess:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN xp_earned FLOAT DEFAULT 0.0"))
+            if "mood_summary" not in columns_sess:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN mood_summary VARCHAR(100)"))
+                
             conn.commit()
+
     except Exception as e:
         # If it fails (e.g. column already exists or table doesn't exist), just ignore
         pass
@@ -217,7 +238,9 @@ def save_engagement_log(db, session_id: int, metrics: dict):
         engagement_score=metrics.get("engagement_score", 0.0),
         is_distracted=metrics.get("is_distracted", False),
         is_spoof=metrics.get("is_spoof", False),
+        sentiment=metrics.get("sentiment", "Neutral"),
     )
+
     db.add(log)
     db.commit()
     return log

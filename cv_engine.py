@@ -142,22 +142,18 @@ def calculate_emotion(landmarks, mar, ear):
     Heuristic-based focus/mood classification.
     Returns: label (str), confidence (float)
     """
-    # Simple heuristics using mouth (MAR) and eyes (EAR)
-    # Smile: Wide mouth + horizontal stretch
-    # Tired: Low EAR + High MAR (yawning)
-    # Focused: Stable EAR + neutral mouth
-    
     if mar > 0.45:
-        return "Tired/Yawning", 0.9
+        return "Yawning", 0.9
+    if mar > 0.25:
+        return "Smiling", 0.7
+    if ear < 0.20:
+        return "Sleepy", 0.9
+    if ear < 0.26:
+        return "Tired", 0.8
     if mar < 0.15:
         return "Focused", 0.85
-    if mar > 0.28:
-        return "Engaged/Smiling", 0.7
         
-    if ear < 0.22:
-        return "Sleepy", 0.9
-        
-    return "Neutral/Focused", 0.8
+    return "Neutral", 0.8
 
 
 

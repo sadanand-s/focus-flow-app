@@ -69,7 +69,12 @@ for sess in sessions:
     if status_filter == "Active" and sess.status != "active": continue
     if status_filter == "Completed" and sess.status != "completed": continue
     
-    with st.expander(f"{sess.start_time.strftime('%b %d, %H:%M')} — {sess.name} ({sess.tag})", expanded=(sess.status == 'active')):
+    # Determine Mood Icon
+    mood_icons = {"Smiling": "😊", "Focused": "🎯", "Tired": "🥱", "Sleepy": "😴", "Yawning": "🥱", "Neutral": "😐"}
+    mood_icon = mood_icons.get(sess.mood_summary, "📚")
+    
+    with st.expander(f"{mood_icon} {sess.start_time.strftime('%b %d, %H:%M')} — {sess.name} ({sess.tag})", expanded=(sess.status == 'active')):
+
         # Metrics Row
         m1, m2, m3, m4 = st.columns(4)
         with m1:
@@ -78,6 +83,18 @@ for sess in sessions:
         with m2: render_metric_card("Avg Focus", f"{sess.avg_engagement:.1f}%", "🎯")
         with m3: render_metric_card("Peak Focus", f"{sess.peak_engagement:.1f}%", "⚡")
         with m4: render_metric_card("Alerts", f"{sess.total_distractions}", "⚡")
+        
+        # New Vision Metrics
+        st.markdown(f"""
+        <div style="display:flex; gap:10px; margin-top:5px;">
+            <div style="background:rgba(255,255,255,0.05); border-radius:10px; padding:5px 12px; font-size:0.85rem; color:#9E9E9E;">
+                🎭 Mood: <b style="color:#FFF;">{sess.mood_summary or 'Neutral'}</b>
+            </div>
+            <div style="background:rgba(255,215,0,0.1); border-radius:10px; padding:5px 12px; font-size:0.85rem; color:#FFD700;">
+                🔥 XP Earned: <b style="color:#FFD700;">+{int(sess.xp_earned or 0)}</b>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         

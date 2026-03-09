@@ -23,8 +23,8 @@ try:
     all_sessions = get_user_sessions(db, user_id, status="completed")
     
     # ─── Lifetime Focus Stats (XP System) ──────────────────────────
-    # Focus XP = Sum of (Duration * Avg Engagement / 100)
-    total_xp = sum((s.duration_seconds or 0) * (s.avg_engagement or 0) / 100 for s in all_sessions)
+    # Focus XP = Sum of (xp_earned) OR Fallback to (Duration * Engagement)
+    total_xp = sum((s.xp_earned or (s.duration_seconds or 0) * (s.avg_engagement or 0) / 100) for s in all_sessions)
     
     # Define Ranks
     ranks = [

@@ -399,8 +399,9 @@ with col_controls:
                         st.session_state['live_stats'] = {
                             'scores': [], 'timestamps': [],
                             'distractions': 0, 'gaze_scores': [],
-                            'ear_values': [],
+                            'ear_values': [], 'moods': [], # Added moods tracking
                         }
+
                         st.session_state['spoof_count'] = 0
                         st.session_state['distraction_start_time'] = None
                         st.rerun()
@@ -450,7 +451,20 @@ with col_controls:
                         session.peak_engagement = float(max(stats['scores']))
                     session.total_distractions = int(stats.get('distractions', 0))
                     session.spoof_detected = st.session_state.get('spoof_count', 0) > 0
+                    
+                    # --- Vision Persistence ---
+                    # XP earned this session
+                    session.xp_earned = float(st.session_state.get('focus_points', 0))
+                    
+                    # Main Mood (Most frequent)
+                    if stats.get('moods'):
+                        from collections import Counter
+                        most_common = Counter(stats['moods']).most_common(1)
+                        if most_common:
+                            session.mood_summary = most_common[0][0]
+                    
                     db.commit()
+
 
                 db.close()
                 st.session_state['current_session_id'] = None
@@ -488,6 +502,12 @@ with col_controls:
             if len(st.session_state['live_stats']['scores']) > 600:
                 st.session_state['live_stats']['scores'] = st.session_state['live_stats']['scores'][-600:]
                 st.session_state['live_stats']['timestamps'] = st.session_state['live_stats']['timestamps'][-600:]
+            
+            # Update moods tracking
+            if latest.get('sentiment'):
+                st.session_state['live_stats'].setdefault('moods', []).append(latest['sentiment'])
+                if len(st.session_state['live_stats']['moods']) > 600:
+                    st.session_state['live_stats']['moods'] = st.session_state['live_stats']['moods'][-600:]
 
             # Update distractions
             if latest.get('is_distracted', False):
